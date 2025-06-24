@@ -73,6 +73,7 @@ export default function AIVideoEditor() {
     confidence: number
   }>>([])
   const [cutSegments, setCutSegments] = useState<Array<{start: number, end: number, type: 'filler' | 'pause'}>>([])
+  const [appliedCuts, setAppliedCuts] = useState<Array<{start: number, end: number, type: 'filler' | 'pause'}>>([])
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -100,6 +101,65 @@ export default function AIVideoEditor() {
     const mins = Math.floor(seconds / 60)
     const secs = Math.floor(seconds % 60)
     return `${mins}:${secs.toString().padStart(2, "0")}`
+  }
+
+  // Helper function to check if a time is within any applied cut segment
+  const isTimeInCutSegment = (time: number) => {
+    return appliedCuts.some(cut => time >= cut.start && time <= cut.end)
+  }
+
+  // Helper function to get the next valid time after cuts
+  const getNextValidTime = (time: number) => {
+    const sortedCuts = [...appliedCuts].sort((a, b) => a.start - b.start)
+    
+    for (const cut of sortedCuts) {
+      if (time >= cut.start && time <= cut.end) {
+        // If we're in a cut segment, jump to the end of it
+        return cut.end + 0.1 // Add small buffer to avoid edge cases
+      }
+    }
+    
+    return time
+  }
+
+  // Helper function to convert edited time to original video time
+  const getOriginalVideoTime = (editedTime: number) => {
+    const sortedCuts = [...appliedCuts].sort((a, b) => a.start - b.start)
+    let originalTime = editedTime
+    
+    for (const cut of sortedCuts) {
+      if (editedTime >= cut.start) {
+        // Add back the duration of this cut segment
+        originalTime += (cut.end - cut.start)
+      } else {
+        break
+      }
+    }
+    
+    return originalTime
+  }
+
+  // Helper function to convert original video time to edited time
+  const getEditedTime = (originalTime: number) => {
+    const sortedCuts = [...appliedCuts].sort((a, b) => a.start - b.start)
+    let editedTime = originalTime
+    
+    for (const cut of sortedCuts) {
+      if (originalTime >= cut.end) {
+        // Subtract the duration of this cut segment
+        editedTime -= (cut.end - cut.start)
+      } else if (originalTime >= cut.start) {
+        // We're in a cut segment, map to the start of the cut
+        editedTime = cut.start - sortedCuts
+          .filter(c => c.end <= cut.start)
+          .reduce((total, c) => total + (c.end - c.start), 0)
+        break
+      } else {
+        break
+      }
+    }
+    
+    return Math.max(0, editedTime)
   }
 
   const handleProcess = async () => {
@@ -426,6 +486,47 @@ export default function AIVideoEditor() {
     if (detectedPauses.length > 0 || detectedFillerWords.length > 0) {
       drawAnalysisMarkers()
     }
+  }
+
+  const drawAppliedCuts = () => {
+    if (!canvasRef.current) return
+    
+    const canvas = canvasRef.current
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    
+    const width = canvas.width
+    const height = canvas.height
+    
+    // Use original video duration for positioning
+    const originalDuration = videoRef.current?.duration || duration + appliedCuts.reduce((total, cut) => total + (cut.end - cut.start), 0)
+    
+    // Draw applied cuts as dark overlay
+    appliedCuts.forEach(cut => {
+      const startX = (cut.start / originalDuration) * width
+      const endX = (cut.end / originalDuration) * width
+      const cutWidth = Math.max(2, endX - startX)
+      
+      // Draw dark overlay for cut segments
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.7)'
+      ctx.fillRect(startX, 0, cutWidth, height)
+      
+      // Draw border
+      ctx.strokeStyle = '#374151'
+      ctx.lineWidth = 1
+      ctx.strokeRect(startX, 0, cutWidth, height)
+      
+      // Draw "CUT" text in the middle
+      const centerX = startX + (cutWidth / 2)
+      const centerY = height / 2
+      
+      if (cutWidth > 30) { // Only show text if there's enough space
+        ctx.fillStyle = '#ffffff'
+        ctx.font = 'bold 10px Arial'
+        ctx.textAlign = 'center'
+        ctx.fillText('CUT', centerX, centerY + 3)
+      }
+    })
   }
 
   const drawPlaceholderWaveform = () => {
@@ -963,6 +1064,11 @@ export default function AIVideoEditor() {
         ctx.stroke()
       }
     })
+    
+    // Draw applied cuts as dark overlays on top of everything
+    if (appliedCuts.length > 0) {
+      drawAppliedCuts()
+    }
   }
 
   const handleWaveformClick = (event: React.MouseEvent<HTMLCanvasElement>) => {
@@ -1111,11 +1217,14 @@ export default function AIVideoEditor() {
          setIsProcessing(false)
          setProcessingProgress(0)
          
-         // Clear the applied cuts since they're now processed
-         setCutSegments([])
-         
-         // Update duration to reflect the cuts
-         setDuration(newDuration)
+                   // Store the applied cuts for video playback handling
+          setAppliedCuts(sortedCuts)
+          
+          // Clear the pending cuts since they're now processed
+          setCutSegments([])
+          
+          // Update duration to reflect the cuts
+          setDuration(newDuration)
          
          // Update filler words count
          setFillerWordsDetected(prev => Math.max(0, prev - fillerCuts))
@@ -1258,7 +1367,21 @@ export default function AIVideoEditor() {
 
   const handleTimeUpdate = () => {
     if (videoRef.current) {
-      setCurrentTime(videoRef.current.currentTime)
+      const originalTime = videoRef.current.currentTime
+      
+      // Check if we're in a cut segment and need to skip
+      if (appliedCuts.length > 0 && isTimeInCutSegment(originalTime)) {
+        const nextValidTime = getNextValidTime(originalTime)
+        if (nextValidTime !== originalTime && nextValidTime < (videoRef.current.duration || 0)) {
+          console.log(`Skipping cut segment: ${originalTime.toFixed(2)}s → ${nextValidTime.toFixed(2)}s`)
+          videoRef.current.currentTime = nextValidTime
+          return
+        }
+      }
+      
+      // Convert original time to edited time for display
+      const displayTime = appliedCuts.length > 0 ? getEditedTime(originalTime) : originalTime
+      setCurrentTime(displayTime)
       
       // Update static waveform playhead during playback
       if (audioData && audioData.length > 0 && !animationFrameRef.current) {
@@ -1295,7 +1418,15 @@ export default function AIVideoEditor() {
 
   const handleSeek = (newTime: number) => {
     if (videoRef.current) {
-      videoRef.current.currentTime = newTime
+      // Convert edited time to original video time if cuts have been applied
+      const originalTime = appliedCuts.length > 0 ? getOriginalVideoTime(newTime) : newTime
+      
+      // Make sure we don't seek to a cut segment
+      const validTime = appliedCuts.length > 0 ? getNextValidTime(originalTime) : originalTime
+      
+      console.log(`Seeking: edited=${newTime.toFixed(2)}s → original=${validTime.toFixed(2)}s`)
+      
+      videoRef.current.currentTime = validTime
       setCurrentTime(newTime)
     }
   }
