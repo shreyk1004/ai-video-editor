@@ -587,14 +587,10 @@ export default function AIVideoEditor() {
     return new Blob([arrayBuffer], { type: 'audio/wav' })
   }
 
-  const detectFillerWordsWithWhisper = async (audioBlob: Blob) => {
+  const detectFillerWordsWithFal = async (audioBlob: Blob) => {
     try {
       const formData = new FormData()
       formData.append('file', audioBlob, 'audio.wav')
-      formData.append('model', 'whisper-1')
-      formData.append('language', selectedLanguage === 'en' ? 'en' : selectedLanguage)
-      formData.append('response_format', 'verbose_json')
-      formData.append('timestamp_granularities[]', 'word')
       
       const response = await fetch('/api/transcribe', {
         method: 'POST',
@@ -608,49 +604,70 @@ export default function AIVideoEditor() {
       
       const result = await response.json()
       
-      // Extract filler words from transcription
+      // fal.ai turbo doesn't provide word-level timestamps, so we'll do text-based detection
+      const transcriptionText = result.text || ''
+      
+      // Extract filler words from transcription with precise matching
       const fillerWordPatterns = [
-        'um', 'uh', 'er', 'ah', 'like', 'you know', 'so', 'actually', 
-        'basically', 'literally', 'right', 'okay', 'well', 'hmm',
-        'uhm', 'umm', 'erm', 'eh'
+        'um', 'uh', 'ah', 'uhm', 'umm', 'erm', 'eh', 'hmm',
+        'mm-hmm', 'uh-huh', 'mm', 'mhmm'
       ]
       
       const detectedFillers: Array<{word: string, start: number, end: number, confidence: number}> = []
       const transcriptionSegments: Array<{text: string, start: number, end: number, confidence: number}> = []
       
-      if (result.words) {
-        result.words.forEach((wordData: any) => {
-          const word = wordData.word.toLowerCase().trim()
-          const isFillerWord = fillerWordPatterns.some(pattern => 
-            word.includes(pattern) || pattern.includes(word)
-          )
-          
-          transcriptionSegments.push({
-            text: wordData.word,
-            start: wordData.start,
-            end: wordData.end,
-            confidence: wordData.confidence || 0.9
-          })
-          
-          if (isFillerWord) {
-            detectedFillers.push({
-              word: wordData.word,
-              start: wordData.start,
-              end: wordData.end,
-              confidence: wordData.confidence || 0.9
-            })
+      // Store the full transcription
+      transcriptionSegments.push({
+        text: transcriptionText,
+        start: 0,
+        end: videoRef.current?.duration || 0,
+        confidence: 0.9
+      })
+      
+      // Simple text-based filler word detection (without precise timestamps)
+      const words = transcriptionText.toLowerCase().split(/\s+/)
+      let fillerCount = 0
+      
+             words.forEach((word: string, index: number) => {
+        const cleanWord = word.replace(/[^\w-]/g, '') // Remove punctuation but keep hyphens
+        
+        // Check for definite filler words
+        const isDefiniteFillerWord = fillerWordPatterns.some(pattern => {
+          if (pattern.includes('-')) {
+            return cleanWord === pattern
+          } else {
+            return cleanWord === pattern
           }
         })
-      }
+        
+        // Additional check for very short hesitation sounds
+        const isShortHesitation = cleanWord.length <= 3 && /^(um|uh|ah|oh|mm)+$/.test(cleanWord)
+        
+        if (isDefiniteFillerWord || isShortHesitation) {
+          fillerCount++
+          // Estimate timestamps based on word position (rough approximation)
+          const duration = videoRef.current?.duration || 180
+          const estimatedStart = (index / words.length) * duration
+          const estimatedEnd = estimatedStart + 0.5 // Assume 0.5 second duration
+          
+          detectedFillers.push({
+            word: cleanWord,
+            start: estimatedStart,
+            end: estimatedEnd,
+            confidence: 0.8 // Lower confidence since we're estimating
+          })
+        }
+      })
       
       setTranscription(transcriptionSegments)
       setDetectedFillerWords(detectedFillers)
       
-      console.log(`Detected ${detectedFillers.length} filler words:`, detectedFillers)
+      console.log(`Detected ${detectedFillers.length} filler words in transcription:`, transcriptionText)
+      console.log('Filler words found:', detectedFillers)
       
       return detectedFillers
     } catch (error) {
-      console.error('Error with Whisper API:', error)
+      console.error('Error with fal.ai transcription API:', error)
       // Fallback to local detection if API fails
       return []
     }
@@ -679,9 +696,9 @@ export default function AIVideoEditor() {
       const videoBlob = await response.blob()
       const audioBlob = await extractAudioForTranscription(videoBlob)
       
-      // Step 3: OpenAI Whisper transcription for filler words
+      // Step 3: fal.ai transcription for filler words
       setAnalysisProgress(60)
-      const fillerWords = await detectFillerWordsWithWhisper(audioBlob)
+      const fillerWords = await detectFillerWordsWithFal(audioBlob)
       
       // Step 4: Update UI with results
       setAnalysisProgress(80)
