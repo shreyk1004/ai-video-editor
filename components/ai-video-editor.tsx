@@ -49,13 +49,23 @@ export default function AIVideoEditor() {
   // New AI analysis states
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [analysisProgress, setAnalysisProgress] = useState(0)
-  const [detectedPauses, setDetectedPauses] = useState<Array<{start: number, end: number, duration: number}>>([])
+  const [detectedPauses, setDetectedPauses] = useState<Array<{start: number, end: number, duration: number}>>([
+    // Test data to see dots immediately
+    { start: 15, end: 17, duration: 2.0 },
+    { start: 45, end: 46.5, duration: 1.5 },
+    { start: 90, end: 92.5, duration: 2.5 }
+  ])
   const [detectedFillerWords, setDetectedFillerWords] = useState<Array<{
     word: string, 
     start: number, 
     end: number, 
     confidence: number
-  }>>([])
+  }>>([
+    // Test data to see dots immediately
+    { word: 'um', start: 25, end: 25.5, confidence: 0.9 },
+    { word: 'uh', start: 60, end: 60.3, confidence: 0.85 },
+    { word: 'like', start: 120, end: 120.8, confidence: 0.8 }
+  ])
   const [transcription, setTranscription] = useState<Array<{
     text: string,
     start: number,
@@ -411,6 +421,11 @@ export default function AIVideoEditor() {
     ctx.stroke()
     
     ctx.globalAlpha = 1.0
+    
+    // Draw analysis markers (pauses and filler words) on top of waveform
+    if (detectedPauses.length > 0 || detectedFillerWords.length > 0) {
+      drawAnalysisMarkers()
+    }
   }
 
   const drawPlaceholderWaveform = () => {
@@ -729,59 +744,67 @@ export default function AIVideoEditor() {
   }
 
   const drawAnalysisMarkers = () => {
-    if (!canvasRef.current || !duration) return
+    if (!canvasRef.current) {
+      console.log('No canvas ref available for drawing markers')
+      return
+    }
     
     const canvas = canvasRef.current
     const ctx = canvas.getContext('2d')
-    if (!ctx) return
+    if (!ctx) {
+      console.log('No canvas context available for drawing markers')
+      return
+    }
     
     const width = canvas.width
     const height = canvas.height
     
-    // Draw pause markers (yellow/orange)
+    // Use video duration if available, otherwise fall back to state duration
+    const videoDuration = videoRef.current?.duration || duration
+    
+    if (!videoDuration || videoDuration <= 0) {
+      console.log('No valid duration available for drawing markers:', {
+        videoDuration: videoRef.current?.duration,
+        stateDuration: duration
+      })
+      return
+    }
+    
+    console.log('Drawing analysis markers:', {
+      pauses: detectedPauses.length,
+      fillerWords: detectedFillerWords.length,
+      duration: videoDuration,
+      canvasSize: { width, height },
+      pauseTimestamps: detectedPauses.map(p => `${p.start}s-${p.end}s`),
+      fillerTimestamps: detectedFillerWords.map(f => `${f.start}s-${f.end}s`),
+      pausePositions: detectedPauses.map(p => `${((p.start / videoDuration) * width).toFixed(1)}px`),
+      fillerPositions: detectedFillerWords.map(f => `${((f.start / videoDuration) * width).toFixed(1)}px`)
+    })
+    
+    // Draw pause markers (red dots and regions)
     detectedPauses.forEach(pause => {
-      const startX = (pause.start / duration) * width
-      const endX = (pause.end / duration) * width
+      const startX = (pause.start / videoDuration) * width
+      const endX = (pause.end / videoDuration) * width
       const pauseWidth = Math.max(2, endX - startX)
+      const centerX = startX + (pauseWidth / 2)
       
       // Check if this segment is marked for cutting
       const isCut = cutSegments.some(cut => 
         cut.start <= pause.start && cut.end >= pause.end && cut.type === 'pause'
       )
       
-      // Draw pause region
-      ctx.fillStyle = isCut ? 'rgba(156, 163, 175, 0.4)' : 'rgba(251, 191, 36, 0.4)' // gray if cut, amber otherwise
+      // Draw pause region (subtle background)
+      ctx.fillStyle = isCut ? 'rgba(156, 163, 175, 0.3)' : 'rgba(239, 68, 68, 0.2)' // gray if cut, light red otherwise
       ctx.fillRect(startX, 0, pauseWidth, height)
       
       // Draw pause border
-      ctx.strokeStyle = isCut ? '#9ca3af' : '#f59e0b' // gray if cut, amber otherwise
+      ctx.strokeStyle = isCut ? '#9ca3af' : '#ef4444' // gray if cut, red otherwise
       ctx.lineWidth = 1
       ctx.strokeRect(startX, 0, pauseWidth, height)
-    })
-    
-    // Draw filler word markers with clickable cut dots
-    detectedFillerWords.forEach((filler, index) => {
-      const startX = (filler.start / duration) * width
-      const endX = (filler.end / duration) * width
-      const fillerWidth = Math.max(3, endX - startX)
-      const centerX = startX + (fillerWidth / 2)
       
-      // Check if this segment is marked for cutting
-      const isCut = cutSegments.some(cut => 
-        cut.start <= filler.start && cut.end >= filler.end && cut.type === 'filler'
-      )
-      
-      // Draw filler word region
-      ctx.fillStyle = isCut ? 'rgba(156, 163, 175, 0.4)' : 'rgba(239, 68, 68, 0.6)' // gray if cut, red otherwise
-      ctx.fillRect(startX, 0, fillerWidth, height)
-      
-      // Draw marker at top
-      ctx.fillStyle = isCut ? '#9ca3af' : '#dc2626' // gray if cut, red otherwise
-      ctx.fillRect(startX, 0, fillerWidth, 4)
-      
-      // Draw clickable cut dot
+      // Draw clickable pause cut dot (RED)
       const dotRadius = 8
-      const dotY = height - 16
+      const dotY = 12 // Top position for pauses
       
       // Dot background (white circle)
       ctx.fillStyle = '#ffffff'
@@ -790,37 +813,89 @@ export default function AIVideoEditor() {
       ctx.fill()
       
       // Dot border and icon
-      ctx.strokeStyle = isCut ? '#22c55e' : '#dc2626' // green if cut, red otherwise
+      ctx.strokeStyle = isCut ? '#22c55e' : '#ef4444' // green if cut, red otherwise
       ctx.lineWidth = 2
       ctx.beginPath()
       ctx.arc(centerX, dotY, dotRadius, 0, 2 * Math.PI)
       ctx.stroke()
       
-      // Draw scissors icon or checkmark
-      ctx.strokeStyle = isCut ? '#22c55e' : '#dc2626'
-      ctx.lineWidth = 2
-      
-      if (isCut) {
-        // Draw checkmark
+      // Fill the dot with red color for pauses
+      if (!isCut) {
+        ctx.fillStyle = '#ef4444'
+        ctx.beginPath()
+        ctx.arc(centerX, dotY, dotRadius - 2, 0, 2 * Math.PI)
+        ctx.fill()
+      } else {
+        // Draw checkmark if cut
+        ctx.strokeStyle = '#22c55e'
+        ctx.lineWidth = 2
         ctx.beginPath()
         ctx.moveTo(centerX - 4, dotY)
         ctx.lineTo(centerX - 1, dotY + 3)
         ctx.lineTo(centerX + 4, dotY - 2)
         ctx.stroke()
-      } else {
-        // Draw scissors icon (simplified)
+      }
+    })
+    
+    // Draw filler word markers (orange dots and regions)
+    detectedFillerWords.forEach((filler, index) => {
+      const startX = (filler.start / videoDuration) * width
+      const endX = (filler.end / videoDuration) * width
+      const fillerWidth = Math.max(3, endX - startX)
+      const centerX = startX + (fillerWidth / 2)
+      
+      // Check if this segment is marked for cutting
+      const isCut = cutSegments.some(cut => 
+        cut.start <= filler.start && cut.end >= filler.end && cut.type === 'filler'
+      )
+      
+      // Draw filler word region (subtle background)
+      ctx.fillStyle = isCut ? 'rgba(156, 163, 175, 0.3)' : 'rgba(249, 115, 22, 0.2)' // gray if cut, light orange otherwise
+      ctx.fillRect(startX, 0, fillerWidth, height)
+      
+      // Draw filler word border
+      ctx.strokeStyle = isCut ? '#9ca3af' : '#f97316' // gray if cut, orange otherwise
+      ctx.lineWidth = 1
+      ctx.strokeRect(startX, 0, fillerWidth, height)
+      
+      // Draw clickable filler word cut dot (ORANGE)
+      const dotRadius = 8
+      const dotY = height - 12 // Bottom position for filler words
+      
+      // Dot background (white circle)
+      ctx.fillStyle = '#ffffff'
+      ctx.beginPath()
+      ctx.arc(centerX, dotY, dotRadius, 0, 2 * Math.PI)
+      ctx.fill()
+      
+      // Dot border
+      ctx.strokeStyle = isCut ? '#22c55e' : '#f97316' // green if cut, orange otherwise
+      ctx.lineWidth = 2
+      ctx.beginPath()
+      ctx.arc(centerX, dotY, dotRadius, 0, 2 * Math.PI)
+      ctx.stroke()
+      
+      // Fill the dot with orange color for filler words
+      if (!isCut) {
+        ctx.fillStyle = '#f97316'
         ctx.beginPath()
-        ctx.moveTo(centerX - 3, dotY - 2)
-        ctx.lineTo(centerX + 3, dotY + 2)
-        ctx.moveTo(centerX - 3, dotY + 2)
-        ctx.lineTo(centerX + 3, dotY - 2)
+        ctx.arc(centerX, dotY, dotRadius - 2, 0, 2 * Math.PI)
+        ctx.fill()
+      } else {
+        // Draw checkmark if cut
+        ctx.strokeStyle = '#22c55e'
+        ctx.lineWidth = 2
+        ctx.beginPath()
+        ctx.moveTo(centerX - 4, dotY)
+        ctx.lineTo(centerX - 1, dotY + 3)
+        ctx.lineTo(centerX + 4, dotY - 2)
         ctx.stroke()
       }
     })
   }
 
   const handleWaveformClick = (event: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!canvasRef.current || !duration || detectedFillerWords.length === 0) return
+    if (!canvasRef.current) return
     
     const canvas = canvasRef.current
     const rect = canvas.getBoundingClientRect()
@@ -831,22 +906,54 @@ export default function AIVideoEditor() {
     const canvasX = (x / rect.width) * canvas.width
     const canvasY = (y / rect.height) * canvas.height
     
-    // Check if click is near any filler word cut dot
-    detectedFillerWords.forEach((filler, index) => {
-      const startX = (filler.start / duration) * canvas.width
-      const endX = (filler.end / duration) * canvas.width
-      const fillerWidth = Math.max(3, endX - startX)
-      const centerX = startX + (fillerWidth / 2)
-      const dotY = canvas.height - 16
+    // Use video duration if available, otherwise fall back to state duration
+    const videoDuration = videoRef.current?.duration || duration
+    
+    if (!videoDuration || videoDuration <= 0) return
+    
+    let clickHandled = false
+    
+    // Check if click is near any pause cut dot (top of waveform)
+    detectedPauses.forEach((pause, index) => {
+      if (clickHandled) return
+      
+      const startX = (pause.start / videoDuration) * canvas.width
+      const endX = (pause.end / videoDuration) * canvas.width
+      const pauseWidth = Math.max(2, endX - startX)
+      const centerX = startX + (pauseWidth / 2)
+      const dotY = 12 // Top position
       const dotRadius = 12 // Slightly larger hit area
       
       const distance = Math.sqrt(Math.pow(canvasX - centerX, 2) + Math.pow(canvasY - dotY, 2))
       
       if (distance <= dotRadius) {
-        // Toggle cut for this filler word
-        toggleCutSegment(filler)
+        // Toggle cut for this pause
+        toggleCutSegment(pause)
+        clickHandled = true
       }
     })
+    
+          // Check if click is near any filler word cut dot (bottom of waveform)
+      if (!clickHandled) {
+        detectedFillerWords.forEach((filler, index) => {
+          if (clickHandled) return
+          
+          const startX = (filler.start / videoDuration) * canvas.width
+          const endX = (filler.end / videoDuration) * canvas.width
+        const fillerWidth = Math.max(3, endX - startX)
+        const centerX = startX + (fillerWidth / 2)
+        const dotY = canvas.height - 12 // Bottom position
+        const dotRadius = 12 // Slightly larger hit area
+        
+        const distance = Math.sqrt(Math.pow(canvasX - centerX, 2) + Math.pow(canvasY - dotY, 2))
+        
+        if (distance <= dotRadius) {
+          // Toggle cut for this filler word
+          toggleCutSegment(filler)
+          clickHandled = true
+        }
+      })
+    }
   }
 
   const toggleCutSegment = (segment: {word: string, start: number, end: number, confidence: number} | {start: number, end: number, duration: number}) => {
@@ -941,6 +1048,11 @@ export default function AIVideoEditor() {
     // Always redraw the complete static waveform with current playhead
     drawFullWaveform(audioData)
     
+    // Draw analysis markers (pauses and filler words) if they exist
+    if (detectedPauses.length > 0 || detectedFillerWords.length > 0) {
+      drawAnalysisMarkers()
+    }
+    
     // Add current position indicator (playhead)
     if (videoRef.current) {
       const ctx = canvas.getContext('2d')
@@ -1012,6 +1124,20 @@ export default function AIVideoEditor() {
       if (uploadedVideo && !audioContextRef.current) {
         await generateWaveform()
       }
+      
+      // Force redraw markers after video is loaded
+      setTimeout(() => {
+        if (audioData && audioData.length > 0) {
+          drawFullWaveform(audioData)
+          drawAnalysisMarkers()
+        } else {
+          drawPlaceholderWaveform()
+          // Draw markers even on placeholder
+          if (detectedPauses.length > 0 || detectedFillerWords.length > 0) {
+            drawAnalysisMarkers()
+          }
+        }
+      }, 100)
     }
   }
 
@@ -1021,6 +1147,21 @@ export default function AIVideoEditor() {
       setCurrentTime(newTime)
     }
   }
+
+  // Effect to redraw markers when analysis data changes
+  useEffect(() => {
+    if (canvasRef.current && (detectedPauses.length > 0 || detectedFillerWords.length > 0)) {
+      console.log('Redrawing markers due to data change')
+      setTimeout(() => {
+        if (audioData && audioData.length > 0) {
+          drawFullWaveform(audioData)
+        } else {
+          drawPlaceholderWaveform()
+        }
+        drawAnalysisMarkers()
+      }, 50)
+    }
+  }, [detectedPauses, detectedFillerWords, audioData])
 
   useEffect(() => {
     return () => {
@@ -1201,10 +1342,6 @@ export default function AIVideoEditor() {
                           className="absolute top-0 bottom-0 w-0.5 bg-red-600 z-10 shadow-lg"
                           style={{ left: `${duration > 0 ? (currentTime / duration) * 100 : 0}%` }}
                         />
-                        {/* Filler word markers */}
-                        <div className="absolute top-1 w-2 h-2 bg-red-500 rounded-full shadow" style={{ left: "15%" }} />
-                        <div className="absolute top-1 w-2 h-2 bg-red-500 rounded-full shadow" style={{ left: "32%" }} />
-                        <div className="absolute top-1 w-2 h-2 bg-red-500 rounded-full shadow" style={{ left: "65%" }} />
                       </div>
                     ) : (
                       <div className="absolute inset-0 flex items-center justify-center">
