@@ -49,23 +49,13 @@ export default function AIVideoEditor() {
   // New AI analysis states
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [analysisProgress, setAnalysisProgress] = useState(0)
-  const [detectedPauses, setDetectedPauses] = useState<Array<{start: number, end: number, duration: number}>>([
-    // Test data to see dots immediately
-    { start: 15, end: 17, duration: 2.0 },
-    { start: 45, end: 46.5, duration: 1.5 },
-    { start: 90, end: 92.5, duration: 2.5 }
-  ])
+  const [detectedPauses, setDetectedPauses] = useState<Array<{start: number, end: number, duration: number}>>([])
   const [detectedFillerWords, setDetectedFillerWords] = useState<Array<{
     word: string, 
     start: number, 
     end: number, 
     confidence: number
-  }>>([
-    // Test data to see dots immediately
-    { word: 'um', start: 25, end: 25.5, confidence: 0.9 },
-    { word: 'uh', start: 60, end: 60.3, confidence: 0.85 },
-    { word: 'like', start: 120, end: 120.8, confidence: 0.8 }
-  ])
+  }>>([])
   const [transcription, setTranscription] = useState<Array<{
     text: string,
     start: number,
@@ -706,23 +696,32 @@ export default function AIVideoEditor() {
 
   const detectFillerWordsWithFal = async (audioBlob: Blob) => {
     try {
+      console.log('Starting filler word detection with fal.ai...')
+      console.log('Audio blob size:', audioBlob.size, 'bytes')
+      
       const formData = new FormData()
       formData.append('file', audioBlob, 'audio.wav')
       
+      console.log('Sending request to /api/transcribe...')
       const response = await fetch('/api/transcribe', {
         method: 'POST',
         body: formData,
       })
       
+      console.log('API response status:', response.status)
+      
       if (!response.ok) {
         const errorData = await response.json()
+        console.error('API error response:', errorData)
         throw new Error(errorData.error || `API error: ${response.status}`)
       }
       
       const result = await response.json()
+      console.log('Transcription result:', result)
       
       // fal.ai turbo doesn't provide word-level timestamps, so we'll do text-based detection
       const transcriptionText = result.text || ''
+      console.log('Transcription text:', transcriptionText)
       
       // Extract filler words from transcription with precise matching
       const fillerWordPatterns = [
@@ -741,12 +740,28 @@ export default function AIVideoEditor() {
         confidence: 0.9
       })
       
-      // Simple text-based filler word detection (without precise timestamps)
-      const words = transcriptionText.toLowerCase().split(/\s+/)
+      // Enhanced text-based filler word detection
+      if (transcriptionText.trim().length === 0) {
+        console.warn('Empty transcription text - no filler words to detect')
+        return []
+      }
+      
+      const splitWords = transcriptionText.toLowerCase().split(/\s+/)
+      const words: string[] = []
+      for (const word of splitWords) {
+        if (word.length > 0) {
+          words.push(word)
+        }
+      }
+      console.log('Split words for analysis:', words)
       let fillerCount = 0
       
-             words.forEach((word: string, index: number) => {
+      for (let index = 0; index < words.length; index++) {
+        const word = words[index]
         const cleanWord = word.replace(/[^\w-]/g, '') // Remove punctuation but keep hyphens
+        
+        // Skip empty words
+        if (!cleanWord) continue
         
         // Check for definite filler words
         const isDefiniteFillerWord = fillerWordPatterns.some(pattern => {
@@ -760,12 +775,17 @@ export default function AIVideoEditor() {
         // Additional check for very short hesitation sounds
         const isShortHesitation = cleanWord.length <= 3 && /^(um|uh|ah|oh|mm)+$/.test(cleanWord)
         
-        if (isDefiniteFillerWord || isShortHesitation) {
+        // Also check for common variations
+        const isVariation = ['umm', 'uhh', 'ahh', 'errr', 'emmm'].includes(cleanWord)
+        
+        if (isDefiniteFillerWord || isShortHesitation || isVariation) {
           fillerCount++
           // Estimate timestamps based on word position (rough approximation)
           const duration = videoRef.current?.duration || 180
           const estimatedStart = (index / words.length) * duration
           const estimatedEnd = estimatedStart + 0.5 // Assume 0.5 second duration
+          
+          console.log(`Found filler word: "${cleanWord}" at position ${index}/${words.length} (${estimatedStart.toFixed(1)}s)`)
           
           detectedFillers.push({
             word: cleanWord,
@@ -774,7 +794,7 @@ export default function AIVideoEditor() {
             confidence: 0.8 // Lower confidence since we're estimating
           })
         }
-      })
+      }
       
       setTranscription(transcriptionSegments)
       setDetectedFillerWords(detectedFillers)
@@ -1756,6 +1776,66 @@ export default function AIVideoEditor() {
                 >
                   🔧 Force Redraw Markers
                 </Button>
+                
+                {/* Test filler word detection button */}
+                <Button 
+                  className="w-full mt-2" 
+                  variant="outline" 
+                  onClick={() => {
+                    // Test with sample transcription
+                    const testTranscription = "Hello um this is a test uh video with ah some filler words like you know"
+                    console.log('Testing filler word detection with:', testTranscription)
+                    
+                    const fillerWordPatterns = [
+                      'um', 'uh', 'ah', 'uhm', 'umm', 'erm', 'eh', 'hmm',
+                      'mm-hmm', 'uh-huh', 'mm', 'mhmm', 'like', 'you know'
+                    ]
+                    
+                    const testFillers: Array<{word: string, start: number, end: number, confidence: number}> = []
+                    const words = testTranscription.toLowerCase().split(' ')
+                    
+                    words.forEach((word, index) => {
+                      const cleanWord = word.replace(/[^\w-]/g, '')
+                      if (fillerWordPatterns.includes(cleanWord)) {
+                        const estimatedStart = (index / words.length) * 180
+                        testFillers.push({
+                          word: cleanWord,
+                          start: estimatedStart,
+                          end: estimatedStart + 0.5,
+                          confidence: 0.9
+                        })
+                        console.log(`Found test filler: "${cleanWord}" at ${estimatedStart.toFixed(1)}s`)
+                      }
+                    })
+                    
+                    setDetectedFillerWords(testFillers)
+                    console.log('Set test filler words:', testFillers)
+                  }}
+                >
+                                     🧪 Test Filler Detection
+                 </Button>
+                 
+                 {/* Test API button */}
+                 <Button 
+                   className="w-full mt-2" 
+                   variant="outline" 
+                   onClick={async () => {
+                     try {
+                       console.log('Testing API directly...')
+                       const response = await fetch('/api/transcribe', {
+                         method: 'POST',
+                         body: new FormData() // Empty form data to test
+                       })
+                       console.log('API response status:', response.status)
+                       const result = await response.json()
+                       console.log('API result:', result)
+                     } catch (error) {
+                       console.error('API test error:', error)
+                     }
+                   }}
+                 >
+                   🔌 Test API
+                 </Button>
 
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
@@ -1865,25 +1945,12 @@ export default function AIVideoEditor() {
                       </div>
                     ))
                   ) : (
-                    // Show placeholder data until analysis is complete
-                    fillerWords.map((item, index) => (
-                      <div key={index} className="flex items-center justify-between p-2 bg-gray-50 rounded opacity-50">
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium">&ldquo;{item.word}&rdquo;</span>
-                          <Badge variant="outline">{item.count}x</Badge>
-                        </div>
-                        <Button size="sm" variant="ghost">
-                          <Scissors className="w-3 h-3" />
-                        </Button>
-                      </div>
-                    ))
+                    <div className="text-center py-4 text-gray-500">
+                      <p className="text-sm">No filler words detected yet</p>
+                      <p className="text-xs mt-1">Click &ldquo;Enhance Video&rdquo; to analyze audio</p>
+                    </div>
                   )}
                 </div>
-                {detectedFillerWords.length === 0 && detectedPauses.length === 0 && (
-                  <div className="text-center py-4 text-gray-500">
-                    <p className="text-sm">Click "Enhance Video" to analyze audio</p>
-                  </div>
-                )}
               </CardContent>
             </Card>
 

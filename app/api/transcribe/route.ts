@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 export async function POST(request: NextRequest) {
   try {
     // Check if FAL API key is configured
-    if (!process.env.FAL_KEY) {
+    if (!process.env.FAL_API_KEY) {
       return NextResponse.json(
         { error: 'FAL API key not configured' },
         { status: 500 }
@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
     const response = await fetch('https://fal.run/fal-ai/speech-to-text/turbo', {
       method: 'POST',
       headers: {
-        'Authorization': `Key ${process.env.FAL_KEY}`,
+        'Authorization': `Key ${process.env.FAL_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
