@@ -62,6 +62,7 @@ export default function AIVideoEditor() {
     end: number,
     confidence: number
   }>>([])
+  const [cutSegments, setCutSegments] = useState<Array<{start: number, end: number, type: 'filler' | 'pause'}>>([])
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -743,31 +744,162 @@ export default function AIVideoEditor() {
       const endX = (pause.end / duration) * width
       const pauseWidth = Math.max(2, endX - startX)
       
+      // Check if this segment is marked for cutting
+      const isCut = cutSegments.some(cut => 
+        cut.start <= pause.start && cut.end >= pause.end && cut.type === 'pause'
+      )
+      
       // Draw pause region
-      ctx.fillStyle = 'rgba(251, 191, 36, 0.4)' // amber-400 with opacity
+      ctx.fillStyle = isCut ? 'rgba(156, 163, 175, 0.4)' : 'rgba(251, 191, 36, 0.4)' // gray if cut, amber otherwise
       ctx.fillRect(startX, 0, pauseWidth, height)
       
       // Draw pause border
-      ctx.strokeStyle = '#f59e0b' // amber-500
+      ctx.strokeStyle = isCut ? '#9ca3af' : '#f59e0b' // gray if cut, amber otherwise
       ctx.lineWidth = 1
       ctx.strokeRect(startX, 0, pauseWidth, height)
     })
     
-    // Draw filler word markers (red)
-    detectedFillerWords.forEach(filler => {
+    // Draw filler word markers with clickable cut dots
+    detectedFillerWords.forEach((filler, index) => {
       const startX = (filler.start / duration) * width
       const endX = (filler.end / duration) * width
       const fillerWidth = Math.max(3, endX - startX)
+      const centerX = startX + (fillerWidth / 2)
+      
+      // Check if this segment is marked for cutting
+      const isCut = cutSegments.some(cut => 
+        cut.start <= filler.start && cut.end >= filler.end && cut.type === 'filler'
+      )
       
       // Draw filler word region
-      ctx.fillStyle = 'rgba(239, 68, 68, 0.6)' // red-500 with opacity
+      ctx.fillStyle = isCut ? 'rgba(156, 163, 175, 0.4)' : 'rgba(239, 68, 68, 0.6)' // gray if cut, red otherwise
       ctx.fillRect(startX, 0, fillerWidth, height)
       
       // Draw marker at top
-      ctx.fillStyle = '#dc2626' // red-600
+      ctx.fillStyle = isCut ? '#9ca3af' : '#dc2626' // gray if cut, red otherwise
       ctx.fillRect(startX, 0, fillerWidth, 4)
+      
+      // Draw clickable cut dot
+      const dotRadius = 8
+      const dotY = height - 16
+      
+      // Dot background (white circle)
+      ctx.fillStyle = '#ffffff'
+      ctx.beginPath()
+      ctx.arc(centerX, dotY, dotRadius, 0, 2 * Math.PI)
+      ctx.fill()
+      
+      // Dot border and icon
+      ctx.strokeStyle = isCut ? '#22c55e' : '#dc2626' // green if cut, red otherwise
+      ctx.lineWidth = 2
+      ctx.beginPath()
+      ctx.arc(centerX, dotY, dotRadius, 0, 2 * Math.PI)
+      ctx.stroke()
+      
+      // Draw scissors icon or checkmark
+      ctx.strokeStyle = isCut ? '#22c55e' : '#dc2626'
+      ctx.lineWidth = 2
+      
+      if (isCut) {
+        // Draw checkmark
+        ctx.beginPath()
+        ctx.moveTo(centerX - 4, dotY)
+        ctx.lineTo(centerX - 1, dotY + 3)
+        ctx.lineTo(centerX + 4, dotY - 2)
+        ctx.stroke()
+      } else {
+        // Draw scissors icon (simplified)
+        ctx.beginPath()
+        ctx.moveTo(centerX - 3, dotY - 2)
+        ctx.lineTo(centerX + 3, dotY + 2)
+        ctx.moveTo(centerX - 3, dotY + 2)
+        ctx.lineTo(centerX + 3, dotY - 2)
+        ctx.stroke()
+      }
     })
   }
+
+  const handleWaveformClick = (event: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!canvasRef.current || !duration || detectedFillerWords.length === 0) return
+    
+    const canvas = canvasRef.current
+    const rect = canvas.getBoundingClientRect()
+    const x = event.clientX - rect.left
+    const y = event.clientY - rect.top
+    
+    // Convert to canvas coordinates
+    const canvasX = (x / rect.width) * canvas.width
+    const canvasY = (y / rect.height) * canvas.height
+    
+    // Check if click is near any filler word cut dot
+    detectedFillerWords.forEach((filler, index) => {
+      const startX = (filler.start / duration) * canvas.width
+      const endX = (filler.end / duration) * canvas.width
+      const fillerWidth = Math.max(3, endX - startX)
+      const centerX = startX + (fillerWidth / 2)
+      const dotY = canvas.height - 16
+      const dotRadius = 12 // Slightly larger hit area
+      
+      const distance = Math.sqrt(Math.pow(canvasX - centerX, 2) + Math.pow(canvasY - dotY, 2))
+      
+      if (distance <= dotRadius) {
+        // Toggle cut for this filler word
+        toggleCutSegment(filler)
+      }
+    })
+  }
+
+  const toggleCutSegment = (segment: {word: string, start: number, end: number, confidence: number} | {start: number, end: number, duration: number}) => {
+    const isFillerWord = 'word' in segment
+    const segmentStart = segment.start
+    const segmentEnd = segment.end
+    const segmentType = isFillerWord ? 'filler' : 'pause'
+    
+    setCutSegments(prev => {
+      const existingIndex = prev.findIndex(cut => 
+        cut.start === segmentStart && cut.end === segmentEnd && cut.type === segmentType
+      )
+      
+      if (existingIndex >= 0) {
+        // Remove the cut
+        console.log(`Removing cut for ${segmentType}:`, segment)
+        return prev.filter((_, index) => index !== existingIndex)
+      } else {
+        // Add the cut
+        console.log(`Adding cut for ${segmentType}:`, segment)
+        return [...prev, { start: segmentStart, end: segmentEnd, type: segmentType }]
+      }
+    })
+    
+         // Redraw the waveform with updated markers
+     if (audioData) {
+       drawFullWaveform(audioData)
+       drawAnalysisMarkers()
+     }
+   }
+
+   const applyCuts = () => {
+     if (cutSegments.length === 0) return
+     
+     // Sort cuts by start time for processing
+     const sortedCuts = [...cutSegments].sort((a, b) => a.start - b.start)
+     
+     console.log('Applying cuts to video:', sortedCuts)
+     
+     // In a real implementation, this would:
+     // 1. Create a new video by removing the specified segments
+     // 2. Generate a new file with the cuts applied
+     // 3. Update the video source
+     
+     // For now, we'll simulate the process
+     alert(`Ready to apply ${cutSegments.length} cuts, saving ${cutSegments.reduce((total, cut) => total + (cut.end - cut.start), 0).toFixed(1)} seconds!\n\nThis would create a new video file with the selected segments removed.`)
+     
+     // Update metrics to reflect the cuts
+     const totalTimeSaved = cutSegments.reduce((total, cut) => total + (cut.end - cut.start), 0)
+     const newDuration = duration - totalTimeSaved
+     
+     console.log(`Original duration: ${duration}s, New duration: ${newDuration}s, Time saved: ${totalTimeSaved}s`)
+   }
 
   const enableAudioVisualization = async () => {
     if (videoRef.current && uploadedVideo && !audioEnabled) {
@@ -1049,7 +1181,8 @@ export default function AIVideoEditor() {
                           ref={canvasRef}
                           width={1200}
                           height={64}
-                          className="w-full h-full bg-gray-900 rounded"
+                          className="w-full h-full bg-gray-900 rounded cursor-pointer"
+                          onClick={handleWaveformClick}
                         />
                         {/* Audio enable overlay */}
                         {!audioEnabled && (
@@ -1185,13 +1318,28 @@ export default function AIVideoEditor() {
                           <span className="font-medium">{formatTime(pause.start)}</span>
                           <Badge variant="outline">{pause.duration.toFixed(1)}s</Badge>
                         </div>
-                        <Button 
-                          size="sm" 
-                          variant="ghost"
-                          onClick={() => handleSeek(pause.start)}
-                        >
-                          <SkipForward className="w-3 h-3" />
-                        </Button>
+                        <div className="flex gap-1">
+                          <Button 
+                            size="sm" 
+                            variant="ghost"
+                            onClick={() => handleSeek(pause.start)}
+                            title="Jump to pause"
+                          >
+                            <SkipForward className="w-3 h-3" />
+                          </Button>
+                          <Button 
+                            size="sm" 
+                            variant={cutSegments.some(cut => 
+                              cut.start === pause.start && cut.end === pause.end && cut.type === 'pause'
+                            ) ? "default" : "ghost"}
+                            onClick={() => toggleCutSegment(pause)}
+                            title={cutSegments.some(cut => 
+                              cut.start === pause.start && cut.end === pause.end && cut.type === 'pause'
+                            ) ? "Remove cut" : "Cut this pause"}
+                          >
+                            <Scissors className="w-3 h-3" />
+                          </Button>
+                        </div>
                       </div>
                     ))
                   ) : (
@@ -1226,8 +1374,13 @@ export default function AIVideoEditor() {
                         </div>
                         <Button 
                           size="sm" 
-                          variant="ghost"
-                          onClick={() => handleSeek(filler.start)}
+                          variant={cutSegments.some(cut => 
+                            cut.start === filler.start && cut.end === filler.end && cut.type === 'filler'
+                          ) ? "default" : "ghost"}
+                          onClick={() => toggleCutSegment(filler)}
+                          title={cutSegments.some(cut => 
+                            cut.start === filler.start && cut.end === filler.end && cut.type === 'filler'
+                          ) ? "Remove cut" : "Cut this segment"}
                         >
                           <Scissors className="w-3 h-3" />
                         </Button>
@@ -1255,6 +1408,60 @@ export default function AIVideoEditor() {
                 )}
               </CardContent>
             </Card>
+
+            {/* Selected Cuts Summary */}
+            {cutSegments.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Scissors className="w-5 h-5 text-red-600" />
+                    Selected Cuts
+                    <Badge variant="destructive">{cutSegments.length}</Badge>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="space-y-2 max-h-32 overflow-y-auto">
+                    {cutSegments.map((cut, index) => (
+                      <div key={index} className="flex items-center justify-between p-2 bg-red-50 rounded">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-medium text-red-700">
+                            {cut.type === 'filler' ? 'Filler' : 'Pause'}
+                          </span>
+                          <Badge variant="outline">{formatTime(cut.start)} - {formatTime(cut.end)}</Badge>
+                          <span className="text-xs text-gray-500">
+                            -{(cut.end - cut.start).toFixed(1)}s
+                          </span>
+                        </div>
+                        <Button 
+                          size="sm" 
+                          variant="ghost"
+                          onClick={() => setCutSegments(prev => prev.filter((_, i) => i !== index))}
+                          title="Remove this cut"
+                        >
+                          ×
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="pt-2 border-t">
+                    <div className="flex items-center justify-between text-sm mb-2">
+                      <span className="font-medium">Total time saved:</span>
+                      <span className="text-green-600 font-bold">
+                        {cutSegments.reduce((total, cut) => total + (cut.end - cut.start), 0).toFixed(1)}s
+                      </span>
+                    </div>
+                    <Button 
+                      className="w-full bg-red-600 hover:bg-red-700" 
+                      size="sm"
+                      onClick={() => applyCuts()}
+                    >
+                      <Scissors className="w-3 h-3 mr-2" />
+                      Apply All Cuts
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             {/* Engagement Metrics */}
             <Card>
