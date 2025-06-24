@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useRef, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Slider } from "@/components/ui/slider"
@@ -40,6 +40,19 @@ export default function AIVideoEditor() {
   const [processingProgress, setProcessingProgress] = useState(0)
   const [selectedLanguage, setSelectedLanguage] = useState("en")
   const [fillerWordsDetected, setFillerWordsDetected] = useState(47)
+  const [uploadedVideo, setUploadedVideo] = useState<string | null>(null)
+  const [audioData, setAudioData] = useState<Float32Array | null>(null)
+  const [isDragOver, setIsDragOver] = useState(false)
+  const [audioEnabled, setAudioEnabled] = useState(false)
+  const [waveformGenerated, setWaveformGenerated] = useState(false)
+  
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const audioContextRef = useRef<AudioContext | null>(null)
+  const analyzerRef = useRef<AnalyserNode | null>(null)
+  const animationFrameRef = useRef<number | null>(null)
+  const dropZoneRef = useRef<HTMLDivElement>(null)
 
   const fillerWords = [
     { word: "um", count: 23, timestamp: "0:15" },
@@ -76,6 +89,355 @@ export default function AIVideoEditor() {
       })
     }, 100)
   }
+
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (file && file.type.startsWith('video/')) {
+      const videoUrl = URL.createObjectURL(file)
+      setUploadedVideo(videoUrl)
+      
+      // Reset states
+      setCurrentTime(0)
+      setIsPlaying(false)
+      setAudioEnabled(false)
+    }
+  }
+
+  const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    setIsDragOver(false)
+    
+    const files = event.dataTransfer.files
+    const file = files[0]
+    
+    if (file && file.type.startsWith('video/')) {
+      const videoUrl = URL.createObjectURL(file)
+      setUploadedVideo(videoUrl)
+      
+      // Reset states
+      setCurrentTime(0)
+      setIsPlaying(false)
+      setAudioEnabled(false)
+    }
+  }
+
+  const handleDragOver = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    setIsDragOver(true)
+  }
+
+  const handleDragLeave = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    setIsDragOver(false)
+  }
+
+  const generateWaveform = async () => {
+    if (!videoRef.current || !uploadedVideo) return
+    
+    try {
+      console.log('Generating static waveform from entire video...')
+      
+      // Fetch the video file as blob
+      const response = await fetch(uploadedVideo)
+      const blob = await response.blob()
+      
+      // Create a new audio context for analysis
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)()
+      
+      // Convert blob to array buffer
+      const arrayBuffer = await blob.arrayBuffer()
+      
+      // Try to decode audio from the video file
+      try {
+        const audioBuffer = await audioContext.decodeAudioData(arrayBuffer)
+        const channelData = audioBuffer.getChannelData(0) // Get first channel
+        
+        console.log('Successfully extracted audio data:', channelData.length, 'samples')
+        
+        // Store the full audio data
+        setAudioData(channelData)
+        setWaveformGenerated(true)
+        setAudioEnabled(true)
+        
+        // Draw the complete waveform
+        drawFullWaveform(channelData)
+        
+        // Close this temporary audio context
+        audioContext.close()
+        
+      } catch (decodeError) {
+        console.log('Direct audio decode failed, using alternative method...')
+        
+        // Fallback: Setup real-time analysis for when user enables audio
+        const source = audioContext.createMediaElementSource(videoRef.current)
+        const analyser = audioContext.createAnalyser()
+        
+        analyser.fftSize = 2048
+        source.connect(analyser)
+        analyser.connect(audioContext.destination)
+        
+        audioContextRef.current = audioContext
+        analyzerRef.current = analyser
+        
+        // Draw placeholder waveform
+        drawPlaceholderWaveform()
+        setAudioEnabled(false) // User needs to enable
+        setWaveformGenerated(true)
+      }
+      
+    } catch (error) {
+      console.error('Error generating waveform:', error)
+      drawPlaceholderWaveform()
+      setAudioEnabled(false)
+      setWaveformGenerated(false)
+    }
+  }
+
+  const drawFullWaveform = (audioData: Float32Array) => {
+    if (!canvasRef.current) return
+    
+    const canvas = canvasRef.current
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    
+    const width = canvas.width
+    const height = canvas.height
+    
+    // Clear canvas and set background
+    ctx.fillStyle = '#1f2937'
+    ctx.fillRect(0, 0, width, height)
+    
+    // Calculate samples per pixel
+    const samplesPerPixel = Math.ceil(audioData.length / width)
+    
+    // Draw waveform
+    ctx.strokeStyle = '#3b82f6'
+    ctx.fillStyle = '#3b82f6'
+    ctx.globalAlpha = 0.8
+    
+    for (let x = 0; x < width; x++) {
+      let min = 1.0
+      let max = -1.0
+      
+      // Find min and max values for this pixel
+      for (let s = 0; s < samplesPerPixel; s++) {
+        const sampleIndex = (x * samplesPerPixel) + s
+        if (sampleIndex < audioData.length) {
+          const sample = audioData[sampleIndex]
+          if (sample < min) min = sample
+          if (sample > max) max = sample
+        }
+      }
+      
+      // Convert to canvas coordinates
+      const yMin = ((min + 1) / 2) * height
+      const yMax = ((max + 1) / 2) * height
+      
+      // Draw vertical line for this pixel
+      ctx.fillRect(x, Math.min(yMin, yMax), 1, Math.abs(yMax - yMin) || 1)
+    }
+    
+    // Draw center line
+    ctx.globalAlpha = 0.3
+    ctx.strokeStyle = '#94a3b8'
+    ctx.lineWidth = 1
+    ctx.beginPath()
+    ctx.moveTo(0, height / 2)
+    ctx.lineTo(width, height / 2)
+    ctx.stroke()
+    
+    ctx.globalAlpha = 1.0
+  }
+
+  const drawPlaceholderWaveform = () => {
+    if (!canvasRef.current) return
+    
+    const canvas = canvasRef.current
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    
+    const width = canvas.width
+    const height = canvas.height
+    
+    // Clear canvas and set background
+    ctx.fillStyle = '#1f2937'
+    ctx.fillRect(0, 0, width, height)
+    
+    // Draw center line
+    ctx.strokeStyle = '#94a3b8'
+    ctx.lineWidth = 1
+    ctx.beginPath()
+    ctx.moveTo(0, height / 2)
+    ctx.lineTo(width, height / 2)
+    ctx.stroke()
+    
+    // Draw placeholder waveform pattern
+    ctx.strokeStyle = '#3b82f6'
+    ctx.lineWidth = 2
+    ctx.globalAlpha = 0.3
+    ctx.beginPath()
+    
+    for (let x = 0; x < width; x++) {
+      const frequency = 0.02
+      const amplitude = Math.sin(x * frequency) * Math.sin(x * frequency * 0.1) * 0.4
+      const noise = (Math.random() - 0.5) * 0.1
+      const y = height / 2 + (amplitude + noise) * height / 3
+      
+      if (x === 0) {
+        ctx.moveTo(x, y)
+      } else {
+        ctx.lineTo(x, y)
+      }
+    }
+    ctx.stroke()
+    ctx.globalAlpha = 1.0
+  }
+
+
+
+  const enableAudioVisualization = async () => {
+    if (videoRef.current && uploadedVideo && !audioEnabled) {
+      // If we already have static waveform, just enable real-time playback visualization
+      if (audioData) {
+        setAudioEnabled(true)
+        // Setup real-time audio context for playback
+        try {
+          const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)()
+          const source = audioContext.createMediaElementSource(videoRef.current)
+          const analyser = audioContext.createAnalyser()
+          
+          analyser.fftSize = 2048
+          source.connect(analyser)
+          analyser.connect(audioContext.destination)
+          
+          audioContextRef.current = audioContext
+          analyzerRef.current = analyser
+        } catch (error) {
+          console.log('Audio context setup for playback failed:', error)
+        }
+      } else {
+        // Try to generate waveform again
+        await generateWaveform()
+      }
+    }
+  }
+
+  const visualizeAudio = () => {
+    if (!analyzerRef.current || !canvasRef.current) return
+    
+    const canvas = canvasRef.current
+    const ctx = canvas.getContext('2d')
+    const analyzer = analyzerRef.current
+    
+    if (!ctx) return
+    
+    const bufferLength = analyzer.fftSize
+    const dataArray = new Uint8Array(bufferLength)
+    
+    const draw = () => {
+      // Get time domain data for waveform
+      analyzer.getByteTimeDomainData(dataArray)
+      
+      // Clear canvas
+      ctx.clearRect(0, 0, canvas.width, canvas.height)
+      
+      // Set up waveform styling
+      ctx.lineWidth = 2
+      ctx.strokeStyle = '#3b82f6'
+      ctx.beginPath()
+      
+      const sliceWidth = canvas.width / bufferLength
+      let x = 0
+      
+      // Draw waveform
+      for (let i = 0; i < bufferLength; i++) {
+        const v = dataArray[i] / 128.0
+        const y = v * canvas.height / 2
+        
+        if (i === 0) {
+          ctx.moveTo(x, y)
+        } else {
+          ctx.lineTo(x, y)
+        }
+        
+        x += sliceWidth
+      }
+      
+      ctx.stroke()
+      
+      // Add center line
+      ctx.strokeStyle = '#94a3b8'
+      ctx.lineWidth = 1
+      ctx.beginPath()
+      ctx.moveTo(0, canvas.height / 2)
+      ctx.lineTo(canvas.width, canvas.height / 2)
+      ctx.stroke()
+      
+      // Continue animation
+      animationFrameRef.current = requestAnimationFrame(draw)
+    }
+    
+    draw()
+  }
+
+  const handlePlayPause = async () => {
+    if (!videoRef.current) return
+    
+    if (isPlaying) {
+      videoRef.current.pause()
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current)
+      }
+    } else {
+      // Resume audio context if needed
+      if (audioContextRef.current?.state === 'suspended') {
+        await audioContextRef.current.resume()
+      }
+      
+      videoRef.current.play()
+      visualizeAudio()
+    }
+    setIsPlaying(!isPlaying)
+  }
+
+  const handleTimeUpdate = () => {
+    if (videoRef.current) {
+      setCurrentTime(videoRef.current.currentTime)
+    }
+  }
+
+  const handleLoadedMetadata = async () => {
+    if (videoRef.current) {
+      setDuration(videoRef.current.duration)
+      console.log('Video loaded, duration:', videoRef.current.duration)
+      
+      // Setup audio visualization for the video
+      if (uploadedVideo) {
+        await generateWaveform()
+      }
+    }
+  }
+
+  const handleSeek = (newTime: number) => {
+    if (videoRef.current) {
+      videoRef.current.currentTime = newTime
+      setCurrentTime(newTime)
+    }
+  }
+
+  useEffect(() => {
+    return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current)
+      }
+      if (audioContextRef.current) {
+        audioContextRef.current.close()
+      }
+      if (uploadedVideo) {
+        URL.revokeObjectURL(uploadedVideo)
+      }
+    }
+  }, [uploadedVideo])
 
   return (
     <div className="min-h-screen bg-gray-50 p-4">
@@ -119,30 +481,82 @@ export default function AIVideoEditor() {
             {/* Video Upload/Preview */}
             <Card>
               <CardContent className="p-6">
-                <div className="aspect-video bg-black rounded-lg relative overflow-hidden">
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="text-center text-white">
-                      <Upload className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                      <p className="text-lg mb-2">Drop your video here or click to upload</p>
-                      <p className="text-sm opacity-75">Supports MP4, MOV, AVI up to 2GB</p>
-                      <Button className="mt-4" variant="secondary">
-                        <Upload className="w-4 h-4 mr-2" />
-                        Choose File
-                      </Button>
+                <div 
+                  ref={dropZoneRef}
+                  className={`aspect-video bg-black rounded-lg relative overflow-hidden transition-all duration-200 ${
+                    isDragOver ? 'ring-4 ring-purple-500 ring-opacity-50 bg-purple-900' : ''
+                  }`}
+                  onDrop={handleDrop}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                >
+                  {uploadedVideo ? (
+                    <video
+                      ref={videoRef}
+                      src={uploadedVideo}
+                      className="w-full h-full object-contain"
+                      onTimeUpdate={handleTimeUpdate}
+                      onLoadedMetadata={handleLoadedMetadata}
+                      onPlay={() => setIsPlaying(true)}
+                      onPause={() => setIsPlaying(false)}
+                    />
+                  ) : (
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <div className="text-center text-white">
+                        <Upload className={`w-12 h-12 mx-auto mb-4 opacity-50 transition-all duration-200 ${
+                          isDragOver ? 'scale-110 text-purple-300' : ''
+                        }`} />
+                        <p className="text-lg mb-2">
+                          {isDragOver ? 'Drop your video here' : 'Drop your video here or click to upload'}
+                        </p>
+                        <p className="text-sm opacity-75">Supports MP4, MOV, AVI up to 2GB</p>
+                        {!isDragOver && (
+                          <Button 
+                            className="mt-4" 
+                            variant="secondary"
+                            onClick={() => fileInputRef.current?.click()}
+                          >
+                            <Upload className="w-4 h-4 mr-2" />
+                            Choose File
+                          </Button>
+                        )}
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept="video/*"
+                          onChange={handleFileUpload}
+                          className="hidden"
+                        />
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
 
                 {/* Video Controls */}
                 <div className="mt-4 space-y-3">
                   <div className="flex items-center gap-4">
-                    <Button size="icon" variant="outline" onClick={() => setIsPlaying(!isPlaying)}>
+                    <Button 
+                      size="icon" 
+                      variant="outline" 
+                      onClick={handlePlayPause}
+                      disabled={!uploadedVideo}
+                    >
                       {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
                     </Button>
-                    <Button size="icon" variant="outline">
+                    <Button 
+                      size="icon" 
+                      variant="outline"
+                      disabled={!uploadedVideo}
+                      onClick={() => handleSeek(Math.max(0, currentTime - 10))}
+                    >
                       <SkipBack className="w-4 h-4" />
                     </Button>
-                    <Button size="icon" variant="outline">
+                    <Button 
+                      size="icon" 
+                      variant="outline"
+                      disabled={!uploadedVideo}
+                      onClick={() => handleSeek(Math.min(duration, currentTime + 10))}
+                    >
                       <SkipForward className="w-4 h-4" />
                     </Button>
                     <div className="flex items-center gap-2 flex-1">
@@ -150,30 +564,59 @@ export default function AIVideoEditor() {
                       <Slider
                         value={[currentTime]}
                         max={duration}
-                        step={1}
+                        step={0.1}
                         className="flex-1"
-                        onValueChange={(value) => setCurrentTime(value[0])}
+                        onValueChange={(value) => handleSeek(value[0])}
+                        disabled={!uploadedVideo}
                       />
                       <span className="text-sm text-gray-600">{formatTime(duration)}</span>
                     </div>
-                    <Button size="icon" variant="outline">
+                    <Button size="icon" variant="outline" disabled={!uploadedVideo}>
                       <Volume2 className="w-4 h-4" />
                     </Button>
                   </div>
 
-                  {/* Waveform Timeline */}
+                  {/* Audio Waveform Timeline */}
                   <div className="h-16 bg-gray-100 rounded-lg relative overflow-hidden">
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <div className="flex items-end gap-1 h-12">
-                        {Array.from({ length: 100 }).map((_, i) => (
-                          <div key={i} className="bg-blue-400 w-1" style={{ height: `${Math.random() * 100}%` }} />
-                        ))}
+                    {uploadedVideo ? (
+                      <div className="relative">
+                        <canvas
+                          ref={canvasRef}
+                          width={1200}
+                          height={64}
+                          className="w-full h-full bg-gray-900 rounded"
+                        />
+                        {/* Audio enable overlay */}
+                        {!audioEnabled && (
+                          <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center rounded">
+                            <Button 
+                              onClick={enableAudioVisualization}
+                              className="bg-blue-600 hover:bg-blue-700"
+                              size="sm"
+                            >
+                              Enable Audio Visualization
+                            </Button>
+                          </div>
+                        )}
+                        {/* Playhead indicator */}
+                        <div 
+                          className="absolute top-0 bottom-0 w-0.5 bg-red-600 z-10 shadow-lg"
+                          style={{ left: `${duration > 0 ? (currentTime / duration) * 100 : 0}%` }}
+                        />
+                        {/* Filler word markers */}
+                        <div className="absolute top-1 w-2 h-2 bg-red-500 rounded-full shadow" style={{ left: "15%" }} />
+                        <div className="absolute top-1 w-2 h-2 bg-red-500 rounded-full shadow" style={{ left: "32%" }} />
+                        <div className="absolute top-1 w-2 h-2 bg-red-500 rounded-full shadow" style={{ left: "65%" }} />
                       </div>
-                    </div>
-                    {/* Filler word markers */}
-                    <div className="absolute top-0 w-2 h-2 bg-red-500 rounded-full" style={{ left: "15%" }} />
-                    <div className="absolute top-0 w-2 h-2 bg-red-500 rounded-full" style={{ left: "32%" }} />
-                    <div className="absolute top-0 w-2 h-2 bg-red-500 rounded-full" style={{ left: "65%" }} />
+                    ) : (
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <div className="flex items-end gap-1 h-12">
+                          {Array.from({ length: 100 }).map((_, i) => (
+                            <div key={i} className="bg-blue-400 w-1" style={{ height: `${Math.random() * 100}%` }} />
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </CardContent>
