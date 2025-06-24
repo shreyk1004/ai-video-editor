@@ -39,12 +39,25 @@ cd ai-video-editor
 npm install
 ```
 
-3. Run the development server:
+3. Set up OpenAI API (Optional but Recommended):
+   
+   The AI filler word detection uses OpenAI's Whisper API for accurate transcription.
+   
+   - Copy the environment file: `cp .env.example .env`
+   - Get your OpenAI API key from [OpenAI Platform](https://platform.openai.com/account/api-keys)
+   - Add your API key to `.env`:
+   ```bash
+   OPENAI_API_KEY=your_actual_api_key_here
+   ```
+   
+   **Note**: The app will work without the API key, but filler word detection will be limited. The API key is used server-side for security.
+
+4. Run the development server:
 ```bash
 npm run dev
 ```
 
-4. Open [http://localhost:3000](http://localhost:3000) in your browser.
+5. Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ## Deployment
 
