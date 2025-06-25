@@ -1930,18 +1930,28 @@ export default function AIVideoEditor() {
                             {Math.round(filler.confidence * 100)}%
                           </span>
                         </div>
-                        <Button 
-                          size="sm" 
-                          variant={cutSegments.some(cut => 
-                            cut.start === filler.start && cut.end === filler.end && cut.type === 'filler'
-                          ) ? "default" : "ghost"}
-                          onClick={() => toggleCutSegment(filler)}
-                          title={cutSegments.some(cut => 
-                            cut.start === filler.start && cut.end === filler.end && cut.type === 'filler'
-                          ) ? "Remove cut" : "Cut this segment"}
-                        >
-                          <Scissors className="w-3 h-3" />
-                        </Button>
+                        <div className="flex gap-1">
+                          <Button 
+                            size="sm" 
+                            variant="ghost"
+                            onClick={() => handleSeek(filler.start)}
+                            title="Jump to filler word"
+                          >
+                            <SkipForward className="w-3 h-3" />
+                          </Button>
+                          <Button 
+                            size="sm" 
+                            variant={cutSegments.some(cut => 
+                              cut.start === filler.start && cut.end === filler.end && cut.type === 'filler'
+                            ) ? "default" : "ghost"}
+                            onClick={() => toggleCutSegment(filler)}
+                            title={cutSegments.some(cut => 
+                              cut.start === filler.start && cut.end === filler.end && cut.type === 'filler'
+                            ) ? "Remove cut" : "Cut this segment"}
+                          >
+                            <Scissors className="w-3 h-3" />
+                          </Button>
+                        </div>
                       </div>
                     ))
                   ) : (

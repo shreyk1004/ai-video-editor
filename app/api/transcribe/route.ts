@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { fal } from '@fal-ai/client'
 
 export async function POST(request: NextRequest) {
   try {
@@ -21,41 +22,52 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Convert the audio file to base64 for fal.ai
-    const arrayBuffer = await audioFile.arrayBuffer()
-    const base64Audio = Buffer.from(arrayBuffer).toString('base64')
-    const mimeType = audioFile.type || 'audio/wav'
-    const dataUrl = `data:${mimeType};base64,${base64Audio}`
-
-    // Call fal.ai speech-to-text/turbo API
-    const response = await fetch('https://fal.run/fal-ai/speech-to-text/turbo', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Key ${process.env.FAL_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        audio_path: dataUrl
-      }),
+    console.log('Audio file details:', {
+      name: audioFile.name,
+      size: audioFile.size,
+      type: audioFile.type
     })
 
-    if (!response.ok) {
-      const errorText = await response.text()
-      console.error('fal.ai API error:', response.status, errorText)
+    // Check file size limit (fal.ai may have limits)
+    const maxSize = 25 * 1024 * 1024 // 25MB limit
+    if (audioFile.size > maxSize) {
       return NextResponse.json(
-        { error: `fal.ai API error: ${response.status}` },
-        { status: response.status }
+        { error: `Audio file too large: ${(audioFile.size / 1024 / 1024).toFixed(1)}MB. Maximum allowed: 25MB` },
+        { status: 413 }
       )
     }
 
-    const result = await response.json()
+    // Configure fal.ai client with API key
+    fal.config({
+      credentials: process.env.FAL_API_KEY
+    })
+
+    console.log('Uploading audio file using fal.ai client...')
     
-    // Transform fal.ai response to match OpenAI Whisper format for compatibility
+    // Convert File to the format expected by fal.ai client
+    const audioArrayBuffer = await audioFile.arrayBuffer()
+    const audioFile2 = new File([audioArrayBuffer], audioFile.name, { type: audioFile.type })
+    
+    // Use fal.ai client to upload file and get URL
+    const audioUrl = await fal.storage.upload(audioFile2)
+    console.log('Audio uploaded successfully:', audioUrl)
+
+    console.log('Calling Whisper API with uploaded file URL...')
+    
+    // Use fal.ai client to call the Whisper API
+    const whisperResult = await fal.subscribe('fal-ai/whisper', {
+      input: {
+        audio_url: audioUrl
+      }
+    })
+
+    console.log('Whisper transcription completed:', whisperResult.data)
+    
+    // Transform fal.ai response to match expected format for compatibility
     const transformedResult = {
-      text: result.output || '',
-      // Note: fal.ai turbo doesn't provide word-level timestamps like Whisper
-      // We'll need to handle this differently in the frontend
-      words: null
+      text: whisperResult.data.text || '',
+      // fal.ai Whisper provides chunks with timestamps if needed
+      words: whisperResult.data.chunks || null
     }
     
     return NextResponse.json(transformedResult)
