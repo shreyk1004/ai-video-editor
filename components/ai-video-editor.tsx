@@ -22,14 +22,8 @@ import {
   Download,
   Settings,
   Wand2,
-  Eye,
   Mic,
   Globe,
-  Film,
-  Palette,
-  Music,
-  Type,
-  Layers,
 } from "lucide-react"
 
 export default function AIVideoEditor() {
@@ -79,13 +73,6 @@ export default function AIVideoEditor() {
     { word: "like", count: 8, timestamp: "1:05" },
     { word: "you know", count: 4, timestamp: "1:45" },
   ]
-
-  const engagementMetrics = {
-    attention: 78,
-    pacing: 85,
-    clarity: 92,
-    energy: 67,
-  }
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60)
@@ -1850,10 +1837,6 @@ export default function AIVideoEditor() {
                     <label className="text-sm font-medium">Smart Cuts</label>
                     <Switch defaultChecked />
                   </div>
-                  <div className="flex items-center justify-between">
-                    <label className="text-sm font-medium">Engagement Boost</label>
-                    <Switch defaultChecked />
-                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -2019,203 +2002,11 @@ export default function AIVideoEditor() {
               </Card>
             )}
 
-            {/* Engagement Metrics */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Eye className="w-5 h-5 text-green-600" />
-                  Engagement Score
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {Object.entries(engagementMetrics).map(([key, value]) => (
-                  <div key={key} className="space-y-1">
-                    <div className="flex justify-between text-sm">
-                      <span className="capitalize">{key}</span>
-                      <span className="font-medium">{value}%</span>
-                    </div>
-                    <Progress value={value} className="h-2" />
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
+
           </div>
         </div>
 
-        {/* Bottom Panel - Effects and Tools */}
-        <Card>
-          <CardContent className="p-6">
-            <Tabs defaultValue="effects" className="w-full">
-              <TabsList className="grid w-full grid-cols-5">
-                <TabsTrigger value="effects" className="flex items-center gap-2">
-                  <Film className="w-4 h-4" />
-                  Effects
-                </TabsTrigger>
-                <TabsTrigger value="transitions" className="flex items-center gap-2">
-                  <Layers className="w-4 h-4" />
-                  Transitions
-                </TabsTrigger>
-                <TabsTrigger value="text" className="flex items-center gap-2">
-                  <Type className="w-4 h-4" />
-                  Text
-                </TabsTrigger>
-                <TabsTrigger value="audio" className="flex items-center gap-2">
-                  <Music className="w-4 h-4" />
-                  Audio
-                </TabsTrigger>
-                <TabsTrigger value="color" className="flex items-center gap-2">
-                  <Palette className="w-4 h-4" />
-                  Color
-                </TabsTrigger>
-              </TabsList>
 
-              <TabsContent value="effects" className="mt-4">
-                <div className="grid grid-cols-6 gap-3">
-                  {[
-                    "Zoom In",
-                    "Zoom Out",
-                    "Pan Left",
-                    "Pan Right",
-                    "Fade In",
-                    "Fade Out",
-                    "Blur",
-                    "Sharpen",
-                    "Vintage",
-                    "B&W",
-                    "Sepia",
-                    "Vignette",
-                  ].map((effect) => (
-                    <Button key={effect} variant="outline" className="h-20 flex-col">
-                      <div className="w-8 h-8 bg-gradient-to-br from-purple-400 to-pink-400 rounded mb-1" />
-                      <span className="text-xs">{effect}</span>
-                    </Button>
-                  ))}
-                </div>
-              </TabsContent>
-
-              <TabsContent value="transitions" className="mt-4">
-                <div className="grid grid-cols-6 gap-3">
-                  {[
-                    "Cut",
-                    "Fade",
-                    "Dissolve",
-                    "Wipe",
-                    "Slide",
-                    "Push",
-                    "Iris",
-                    "Clock",
-                    "Zoom",
-                    "Spin",
-                    "Flip",
-                    "Cube",
-                  ].map((transition) => (
-                    <Button key={transition} variant="outline" className="h-20 flex-col">
-                      <div className="w-8 h-8 bg-gradient-to-br from-blue-400 to-cyan-400 rounded mb-1" />
-                      <span className="text-xs">{transition}</span>
-                    </Button>
-                  ))}
-                </div>
-              </TabsContent>
-
-              <TabsContent value="text" className="mt-4">
-                <div className="grid grid-cols-4 gap-4">
-                  <Card className="p-4 cursor-pointer hover:bg-gray-50">
-                    <h3 className="font-bold text-lg">Bold Title</h3>
-                    <p className="text-sm text-gray-600">Perfect for headlines</p>
-                  </Card>
-                  <Card className="p-4 cursor-pointer hover:bg-gray-50">
-                    <h3 className="font-medium italic">Elegant Script</h3>
-                    <p className="text-sm text-gray-600">Stylish and refined</p>
-                  </Card>
-                  <Card className="p-4 cursor-pointer hover:bg-gray-50">
-                    <h3 className="font-mono text-green-600">Code Style</h3>
-                    <p className="text-sm text-gray-600">Technical content</p>
-                  </Card>
-                  <Card className="p-4 cursor-pointer hover:bg-gray-50">
-                    <h3 className="font-bold text-red-500 text-xl">IMPACT</h3>
-                    <p className="text-sm text-gray-600">High attention</p>
-                  </Card>
-                </div>
-              </TabsContent>
-
-              <TabsContent value="audio" className="mt-4">
-                <div className="space-y-4">
-                  <div className="grid grid-cols-3 gap-4">
-                    <Card className="p-4 cursor-pointer hover:bg-gray-50">
-                      <Music className="w-8 h-8 text-purple-600 mb-2" />
-                      <h3 className="font-medium">Background Music</h3>
-                      <p className="text-sm text-gray-600">Add ambient tracks</p>
-                    </Card>
-                    <Card className="p-4 cursor-pointer hover:bg-gray-50">
-                      <Volume2 className="w-8 h-8 text-blue-600 mb-2" />
-                      <h3 className="font-medium">Sound Effects</h3>
-                      <p className="text-sm text-gray-600">Enhance moments</p>
-                    </Card>
-                    <Card className="p-4 cursor-pointer hover:bg-gray-50">
-                      <Mic className="w-8 h-8 text-green-600 mb-2" />
-                      <h3 className="font-medium">Voice Enhancement</h3>
-                      <p className="text-sm text-gray-600">Improve clarity</p>
-                    </Card>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Audio Levels</label>
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-3">
-                        <span className="text-sm w-16">Voice</span>
-                        <Slider defaultValue={[80]} max={100} className="flex-1" />
-                        <span className="text-sm w-8">80%</span>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <span className="text-sm w-16">Music</span>
-                        <Slider defaultValue={[30]} max={100} className="flex-1" />
-                        <span className="text-sm w-8">30%</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </TabsContent>
-
-              <TabsContent value="color" className="mt-4">
-                <div className="space-y-4">
-                  <div className="grid grid-cols-4 gap-3">
-                    {[
-                      { name: "Natural", colors: ["#8B4513", "#228B22", "#87CEEB"] },
-                      { name: "Cinematic", colors: ["#1a1a1a", "#ff6b35", "#f7931e"] },
-                      { name: "Vibrant", colors: ["#ff0080", "#00ff80", "#8000ff"] },
-                      { name: "Vintage", colors: ["#d4a574", "#8b4513", "#2f4f4f"] },
-                    ].map((palette) => (
-                      <Card key={palette.name} className="p-3 cursor-pointer hover:bg-gray-50">
-                        <div className="flex gap-1 mb-2">
-                          {palette.colors.map((color, i) => (
-                            <div key={i} className="w-6 h-6 rounded" style={{ backgroundColor: color }} />
-                          ))}
-                        </div>
-                        <span className="text-sm font-medium">{palette.name}</span>
-                      </Card>
-                    ))}
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Adjustments</label>
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-3">
-                        <span className="text-sm w-20">Brightness</span>
-                        <Slider defaultValue={[50]} max={100} className="flex-1" />
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <span className="text-sm w-20">Contrast</span>
-                        <Slider defaultValue={[50]} max={100} className="flex-1" />
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <span className="text-sm w-20">Saturation</span>
-                        <Slider defaultValue={[50]} max={100} className="flex-1" />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </TabsContent>
-            </Tabs>
-          </CardContent>
-        </Card>
 
         {/* Export Options */}
         <Card>
