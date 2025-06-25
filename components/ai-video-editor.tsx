@@ -38,7 +38,6 @@ export default function AIVideoEditor() {
   const [audioData, setAudioData] = useState<Float32Array | null>(null)
   const [isDragOver, setIsDragOver] = useState(false)
   const [audioEnabled, setAudioEnabled] = useState(false)
-  const [waveformGenerated, setWaveformGenerated] = useState(false)
   
   // New AI analysis states
   const [isAnalyzing, setIsAnalyzing] = useState(false)
@@ -48,12 +47,6 @@ export default function AIVideoEditor() {
     word: string, 
     start: number, 
     end: number, 
-    confidence: number
-  }>>([])
-  const [transcription, setTranscription] = useState<Array<{
-    text: string,
-    start: number,
-    end: number,
     confidence: number
   }>>([])
   const [cutSegments, setCutSegments] = useState<Array<{start: number, end: number, type: 'filler' | 'pause'}>>([])
@@ -66,13 +59,6 @@ export default function AIVideoEditor() {
   const analyzerRef = useRef<AnalyserNode | null>(null)
   const animationFrameRef = useRef<number | null>(null)
   const dropZoneRef = useRef<HTMLDivElement>(null)
-
-  const fillerWords = [
-    { word: "um", count: 23, timestamp: "0:15" },
-    { word: "uh", count: 12, timestamp: "0:32" },
-    { word: "like", count: 8, timestamp: "1:05" },
-    { word: "you know", count: 4, timestamp: "1:45" },
-  ]
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60)
@@ -192,10 +178,6 @@ export default function AIVideoEditor() {
         setCurrentTime(0)
         setIsPlaying(false)
         setAudioEnabled(false)
-        setWaveformGenerated(false)
-        setDetectedPauses([])
-        setDetectedFillerWords([])
-        setAudioData(null)
         
         console.log('Video uploaded successfully:', videoUrl)
       } else {
@@ -243,10 +225,6 @@ export default function AIVideoEditor() {
         setCurrentTime(0)
         setIsPlaying(false)
         setAudioEnabled(false)
-        setWaveformGenerated(false)
-        setDetectedPauses([])
-        setDetectedFillerWords([])
-        setAudioData(null)
         
         console.log('Video uploaded successfully via drag and drop:', videoUrl)
       } else {
@@ -310,7 +288,6 @@ export default function AIVideoEditor() {
         
         // Draw the complete static waveform
         drawFullWaveform(channelData)
-        setWaveformGenerated(true)
         setAudioEnabled(true)
         
         // Close the temporary audio context
@@ -329,7 +306,6 @@ export default function AIVideoEditor() {
       console.error('Error generating waveform:', error)
       drawPlaceholderWaveform()
       setAudioEnabled(false)
-      setWaveformGenerated(true)
     }
   }
 
@@ -398,7 +374,6 @@ export default function AIVideoEditor() {
     // Store and draw the static waveform
     setAudioData(staticAudioData)
     drawFullWaveform(staticAudioData)
-    setWaveformGenerated(true)
     setAudioEnabled(true)
     
     console.log('Static waveform generated successfully!')
@@ -717,15 +692,6 @@ export default function AIVideoEditor() {
       ]
       
       const detectedFillers: Array<{word: string, start: number, end: number, confidence: number}> = []
-      const transcriptionSegments: Array<{text: string, start: number, end: number, confidence: number}> = []
-      
-      // Store the full transcription
-      transcriptionSegments.push({
-        text: transcriptionText,
-        start: 0,
-        end: videoRef.current?.duration || 0,
-        confidence: 0.9
-      })
       
       // Enhanced text-based filler word detection
       if (transcriptionText.trim().length === 0) {
@@ -783,7 +749,6 @@ export default function AIVideoEditor() {
         }
       }
       
-      setTranscription(transcriptionSegments)
       setDetectedFillerWords(detectedFillers)
       
       console.log(`Detected ${detectedFillers.length} filler words in transcription:`, transcriptionText)
@@ -1742,87 +1707,7 @@ export default function AIVideoEditor() {
                   {isProcessing ? "Processing..." : "Enhance Video"}
                 </Button>
                 
-                {/* Debug button - remove later */}
-                <Button 
-                  className="w-full mt-2" 
-                  variant="outline" 
-                  onClick={() => {
-                    console.log('Manual redraw triggered, current data:', {
-                      pauses: detectedPauses.length,
-                      fillerWords: detectedFillerWords.length
-                    })
-                    if (canvasRef.current) {
-                      if (audioData) {
-                        drawFullWaveform(audioData)
-                      } else {
-                        drawPlaceholderWaveform()
-                      }
-                      drawAnalysisMarkers()
-                    }
-                  }}
-                >
-                  🔧 Force Redraw Markers
-                </Button>
-                
-                {/* Test filler word detection button */}
-                <Button 
-                  className="w-full mt-2" 
-                  variant="outline" 
-                  onClick={() => {
-                    // Test with sample transcription
-                    const testTranscription = "Hello um this is a test uh video with ah some filler words like you know"
-                    console.log('Testing filler word detection with:', testTranscription)
-                    
-                    const fillerWordPatterns = [
-                      'um', 'uh', 'ah', 'uhm', 'umm', 'erm', 'eh', 'hmm',
-                      'mm-hmm', 'uh-huh', 'mm', 'mhmm', 'like', 'you know'
-                    ]
-                    
-                    const testFillers: Array<{word: string, start: number, end: number, confidence: number}> = []
-                    const words = testTranscription.toLowerCase().split(' ')
-                    
-                    words.forEach((word, index) => {
-                      const cleanWord = word.replace(/[^\w-]/g, '')
-                      if (fillerWordPatterns.includes(cleanWord)) {
-                        const estimatedStart = (index / words.length) * 180
-                        testFillers.push({
-                          word: cleanWord,
-                          start: estimatedStart,
-                          end: estimatedStart + 0.5,
-                          confidence: 0.9
-                        })
-                        console.log(`Found test filler: "${cleanWord}" at ${estimatedStart.toFixed(1)}s`)
-                      }
-                    })
-                    
-                    setDetectedFillerWords(testFillers)
-                    console.log('Set test filler words:', testFillers)
-                  }}
-                >
-                                     🧪 Test Filler Detection
-                 </Button>
-                 
-                 {/* Test API button */}
-                 <Button 
-                   className="w-full mt-2" 
-                   variant="outline" 
-                   onClick={async () => {
-                     try {
-                       console.log('Testing API directly...')
-                       const response = await fetch('/api/transcribe', {
-                         method: 'POST',
-                         body: new FormData() // Empty form data to test
-                       })
-                       console.log('API response status:', response.status)
-                       const result = await response.json()
-                       console.log('API result:', result)
-                     } catch (error) {
-                       console.error('API test error:', error)
-                     }
-                   }}
-                 >
-                   🔌 Test API
-                 </Button>
+
 
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
