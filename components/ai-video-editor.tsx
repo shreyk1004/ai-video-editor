@@ -370,16 +370,16 @@ export default function AIVideoEditor() {
       amplitude += Math.sin(time * 1.2) * 0.2
       amplitude += Math.sin(time * 2.1) * 0.1
       
-      // Add random variations for natural feel
-      amplitude += (Math.random() - 0.5) * 0.3
+      // Add deterministic variations for natural feel
+      amplitude += (Math.sin(time * 7.3) - 0.5) * 0.3
       
       // Create quiet sections (simulating pauses)
-      if (Math.random() < 0.1) { // 10% chance of quiet section
+      if (Math.sin(time * 3.1) > 0.8) { // Deterministic quiet sections
         amplitude *= 0.1
       }
       
       // Create some louder sections (emphasis)
-      if (Math.random() < 0.05) { // 5% chance of loud section
+      if (Math.sin(time * 5.7) > 0.9) { // Deterministic loud sections
         amplitude *= 2
       }
       
@@ -550,7 +550,7 @@ export default function AIVideoEditor() {
     for (let x = 0; x < width; x++) {
       const frequency = 0.02
       const amplitude = Math.sin(x * frequency) * Math.sin(x * frequency * 0.1) * 0.4
-      const noise = (Math.random() - 0.5) * 0.1
+      const noise = (Math.sin(x * 0.37) - 0.5) * 0.1 // Deterministic noise
       const y = height / 2 + (amplitude + noise) * height / 3
       
       if (x === 0) {
@@ -1669,10 +1669,10 @@ export default function AIVideoEditor() {
                       </div>
                     ) : (
                       <div className="absolute inset-0 flex items-center justify-center">
-                        <div className="flex items-end gap-1 h-12">
-                          {Array.from({ length: 100 }).map((_, i) => (
-                            <div key={i} className="bg-blue-400 w-1" style={{ height: `${Math.random() * 100}%` }} />
-                          ))}
+                                                  <div className="flex items-end gap-1 h-12">
+                            {Array.from({ length: 100 }).map((_, i) => (
+                              <div key={i} className="bg-blue-400 w-1" style={{ height: `${(50 + 40 * Math.sin(i * 0.15)).toFixed(2)}%` }} />
+                            ))}
                         </div>
                       </div>
                     )}
