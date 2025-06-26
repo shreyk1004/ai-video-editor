@@ -1,0 +1,1457 @@
+{
+  "text": " Hi, I'm Kyle Zhang, a junior studying CS and Entrepreneurship in the dual degree program Management and Technology at UPenn. It's called M&T. I'm thrilled to apply for this role because I believe my blend of technical expertise and entrepreneurial spirit aligns perfectly with what's needed. From launching Linus Valorant, which reached 9 million visitors per month, to developing Robin AI, which won the Wharton Startup Challenge Innovation Prize and a $10,000 grant, I've consistently demonstrated my ability to innovate and deliver impactful solutions. I am now the lead engineer of a marketing data analytics startup and developing my own video game. These experiences all taught me the value of teamwork, adaptability, and persistence, and I really hope to bring that to this role. If I'm given this opportunity, I really aim to further refine my leadership and problem-solving skills while contributing meaningful work to your team and spearheading impactful technical projects. I'm excited about growing personally and professionally through this opportunity. My motto that I live by is create meaningful experiences with meaningful people for meaningful people.",
+  "chunks": [
+    {
+      "timestamp": [
+        0,
+        0.84
+      ],
+      "text": " Hi,",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        0.84,
+        1.16
+      ],
+      "text": " I'm",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        1.16,
+        1.32
+      ],
+      "text": " Kyle",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        1.32,
+        1.7
+      ],
+      "text": " Zhang,",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        1.7,
+        1.84
+      ],
+      "text": " a",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        1.84,
+        2.08
+      ],
+      "text": " junior",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        2.08,
+        2.38
+      ],
+      "text": " studying",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        2.38,
+        2.68
+      ],
+      "text": " CS",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        2.68,
+        2.9
+      ],
+      "text": " and",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        2.9,
+        3.52
+      ],
+      "text": " Entrepreneurship",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        3.52,
+        3.68
+      ],
+      "text": " in",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        3.68,
+        3.78
+      ],
+      "text": " the",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        3.78,
+        3.94
+      ],
+      "text": " dual",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        3.94,
+        4.08
+      ],
+      "text": " degree",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        4.08,
+        4.4
+      ],
+      "text": " program",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        4.4,
+        4.88
+      ],
+      "text": " Management",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        4.88,
+        5.22
+      ],
+      "text": " and",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        5.22,
+        5.52
+      ],
+      "text": " Technology",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        5.52,
+        5.92
+      ],
+      "text": " at",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        5.92,
+        6.4
+      ],
+      "text": " UPenn.",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        6.4,
+        6.78
+      ],
+      "text": " It's",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        6.78,
+        6.9
+      ],
+      "text": " called",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        6.9,
+        7.06
+      ],
+      "text": " M",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        7.06,
+        7.38
+      ],
+      "text": "&T.",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        7.38,
+        8.06
+      ],
+      "text": " I'm",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        8.06,
+        8.24
+      ],
+      "text": " thrilled",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        8.24,
+        8.4
+      ],
+      "text": " to",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        8.4,
+        8.58
+      ],
+      "text": " apply",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        8.58,
+        8.8
+      ],
+      "text": " for",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        8.8,
+        9
+      ],
+      "text": " this",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        9,
+        9.18
+      ],
+      "text": " role",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        9.18,
+        9.42
+      ],
+      "text": " because",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        9.42,
+        9.66
+      ],
+      "text": " I",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        9.66,
+        9.92
+      ],
+      "text": " believe",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        9.92,
+        10.1
+      ],
+      "text": " my",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        10.1,
+        10.4
+      ],
+      "text": " blend",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        10.4,
+        10.56
+      ],
+      "text": " of",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        10.56,
+        10.78
+      ],
+      "text": " technical",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        10.78,
+        11.16
+      ],
+      "text": " expertise",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        11.16,
+        11.5
+      ],
+      "text": " and",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        11.5,
+        11.84
+      ],
+      "text": " entrepreneurial",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        11.84,
+        12.08
+      ],
+      "text": " spirit",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        12.08,
+        12.52
+      ],
+      "text": " aligns",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        12.52,
+        12.86
+      ],
+      "text": " perfectly",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        12.86,
+        13.36
+      ],
+      "text": " with",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        13.36,
+        13.58
+      ],
+      "text": " what's",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        13.58,
+        13.96
+      ],
+      "text": " needed.",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        13.96,
+        14.34
+      ],
+      "text": " From",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        14.34,
+        14.66
+      ],
+      "text": " launching",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        14.66,
+        15
+      ],
+      "text": " Linus",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        15,
+        15.4
+      ],
+      "text": " Valorant,",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        15.4,
+        15.74
+      ],
+      "text": " which",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        15.74,
+        15.98
+      ],
+      "text": " reached",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        15.98,
+        16.2
+      ],
+      "text": " 9",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        16.2,
+        16.38
+      ],
+      "text": " million",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        16.38,
+        16.96
+      ],
+      "text": " visitors",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        16.96,
+        17.2
+      ],
+      "text": " per",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        17.2,
+        17.56
+      ],
+      "text": " month,",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        17.56,
+        17.82
+      ],
+      "text": " to",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        17.82,
+        18.16
+      ],
+      "text": " developing",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        18.16,
+        18.48
+      ],
+      "text": " Robin",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        18.48,
+        19
+      ],
+      "text": " AI,",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        19,
+        19.34
+      ],
+      "text": " which",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        19.34,
+        19.58
+      ],
+      "text": " won",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        19.58,
+        19.76
+      ],
+      "text": " the",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        19.76,
+        20.24
+      ],
+      "text": " Wharton",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        20.24,
+        20.56
+      ],
+      "text": " Startup",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        20.56,
+        20.78
+      ],
+      "text": " Challenge",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        20.78,
+        21
+      ],
+      "text": " Innovation",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        21,
+        21.5
+      ],
+      "text": " Prize",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        21.5,
+        21.76
+      ],
+      "text": " and",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        21.76,
+        21.92
+      ],
+      "text": " a",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        21.92,
+        22.08
+      ],
+      "text": " $10",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        22.08,
+        22.82
+      ],
+      "text": ",000",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        22.86,
+        23.48
+      ],
+      "text": " grant,",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        23.48,
+        23.94
+      ],
+      "text": " I've",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        23.94,
+        24.42
+      ],
+      "text": " consistently",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        24.42,
+        24.96
+      ],
+      "text": " demonstrated",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        24.96,
+        25.32
+      ],
+      "text": " my",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        25.32,
+        25.6
+      ],
+      "text": " ability",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        25.6,
+        26.06
+      ],
+      "text": " to",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        26.06,
+        26.3
+      ],
+      "text": " innovate",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        26.3,
+        26.58
+      ],
+      "text": " and",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        26.58,
+        26.76
+      ],
+      "text": " deliver",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        26.76,
+        27.4
+      ],
+      "text": " impactful",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        27.4,
+        28.2
+      ],
+      "text": " solutions.",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        28.2,
+        28.62
+      ],
+      "text": " I",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        28.62,
+        28.74
+      ],
+      "text": " am",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        28.74,
+        28.92
+      ],
+      "text": " now",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        28.92,
+        29.06
+      ],
+      "text": " the",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        29.06,
+        29.3
+      ],
+      "text": " lead",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        29.3,
+        29.62
+      ],
+      "text": " engineer",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        29.62,
+        29.84
+      ],
+      "text": " of",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        29.84,
+        29.92
+      ],
+      "text": " a",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        29.92,
+        30.22
+      ],
+      "text": " marketing",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        30.22,
+        30.4
+      ],
+      "text": " data",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        30.4,
+        30.76
+      ],
+      "text": " analytics",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        30.76,
+        31.06
+      ],
+      "text": " startup",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        31.06,
+        31.48
+      ],
+      "text": " and",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        31.48,
+        31.82
+      ],
+      "text": " developing",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        31.82,
+        32
+      ],
+      "text": " my",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        32,
+        32.2
+      ],
+      "text": " own",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        32.2,
+        32.38
+      ],
+      "text": " video",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        32.38,
+        32.8
+      ],
+      "text": " game.",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        32.8,
+        33.18
+      ],
+      "text": " These",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        33.18,
+        33.54
+      ],
+      "text": " experiences",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        33.54,
+        33.8
+      ],
+      "text": " all",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        33.8,
+        34.04
+      ],
+      "text": " taught",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        34.04,
+        34.2
+      ],
+      "text": " me",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        34.2,
+        34.38
+      ],
+      "text": " the",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        34.38,
+        34.8
+      ],
+      "text": " value",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        34.8,
+        35.18
+      ],
+      "text": " of",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        35.18,
+        35.9
+      ],
+      "text": " teamwork,",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        35.9,
+        36.72
+      ],
+      "text": " adaptability,",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        36.72,
+        37
+      ],
+      "text": " and",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        37,
+        37.54
+      ],
+      "text": " persistence,",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        37.54,
+        37.7
+      ],
+      "text": " and",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        37.7,
+        37.8
+      ],
+      "text": " I",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        37.8,
+        37.96
+      ],
+      "text": " really",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        37.96,
+        38.12
+      ],
+      "text": " hope",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        38.12,
+        38.26
+      ],
+      "text": " to",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        38.26,
+        38.4
+      ],
+      "text": " bring",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        38.4,
+        38.56
+      ],
+      "text": " that",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        38.56,
+        38.9
+      ],
+      "text": " to",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        38.9,
+        39.04
+      ],
+      "text": " this",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        39.04,
+        39.5
+      ],
+      "text": " role.",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        39.5,
+        40.26
+      ],
+      "text": " If",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        40.26,
+        40.86
+      ],
+      "text": " I'm",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        40.86,
+        41.08
+      ],
+      "text": " given",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        41.08,
+        41.26
+      ],
+      "text": " this",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        41.26,
+        41.76
+      ],
+      "text": " opportunity,",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        41.76,
+        41.9
+      ],
+      "text": " I",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        41.9,
+        42.08
+      ],
+      "text": " really",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        42.08,
+        42.34
+      ],
+      "text": " aim",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        42.34,
+        42.54
+      ],
+      "text": " to",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        42.54,
+        42.96
+      ],
+      "text": " further",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        42.96,
+        43.38
+      ],
+      "text": " refine",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        43.38,
+        43.68
+      ],
+      "text": " my",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        43.68,
+        43.98
+      ],
+      "text": " leadership",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        43.98,
+        44.42
+      ],
+      "text": " and",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        44.42,
+        44.72
+      ],
+      "text": " problem",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        44.72,
+        45.14
+      ],
+      "text": "-solving",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        45.14,
+        45.36
+      ],
+      "text": " skills",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        45.36,
+        45.74
+      ],
+      "text": " while",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        45.74,
+        46.14
+      ],
+      "text": " contributing",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        46.14,
+        46.54
+      ],
+      "text": " meaningful",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        46.54,
+        46.92
+      ],
+      "text": " work",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        46.92,
+        47.16
+      ],
+      "text": " to",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        47.16,
+        47.32
+      ],
+      "text": " your",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        47.32,
+        47.56
+      ],
+      "text": " team",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        47.56,
+        48.18
+      ],
+      "text": " and",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        48.18,
+        48.68
+      ],
+      "text": " spearheading",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        48.68,
+        48.96
+      ],
+      "text": " impactful",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        48.96,
+        49.38
+      ],
+      "text": " technical",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        49.38,
+        50.08
+      ],
+      "text": " projects.",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        50.08,
+        50.86
+      ],
+      "text": " I'm",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        50.86,
+        51.1
+      ],
+      "text": " excited",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        51.1,
+        51.36
+      ],
+      "text": " about",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        51.36,
+        51.56
+      ],
+      "text": " growing",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        51.56,
+        52.02
+      ],
+      "text": " personally",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        52.02,
+        52.48
+      ],
+      "text": " and",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        52.48,
+        52.88
+      ],
+      "text": " professionally",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        52.88,
+        53.48
+      ],
+      "text": " through",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        53.48,
+        53.58
+      ],
+      "text": " this",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        53.58,
+        54.3
+      ],
+      "text": " opportunity.",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        54.3,
+        54.8
+      ],
+      "text": " My",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        54.8,
+        55.08
+      ],
+      "text": " motto",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        55.08,
+        55.22
+      ],
+      "text": " that",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        55.22,
+        55.26
+      ],
+      "text": " I",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        55.26,
+        55.42
+      ],
+      "text": " live",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        55.42,
+        55.6
+      ],
+      "text": " by",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        55.6,
+        56.14
+      ],
+      "text": " is",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        56.14,
+        56.64
+      ],
+      "text": " create",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        56.64,
+        56.96
+      ],
+      "text": " meaningful",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        56.96,
+        57.44
+      ],
+      "text": " experiences",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        57.44,
+        58.36
+      ],
+      "text": " with",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        58.36,
+        58.72
+      ],
+      "text": " meaningful",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        58.72,
+        59.08
+      ],
+      "text": " people",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        59.08,
+        59.6
+      ],
+      "text": " for",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        59.6,
+        59.92
+      ],
+      "text": " meaningful",
+      "speaker": null
+    },
+    {
+      "timestamp": [
+        59.92,
+        60.42
+      ],
+      "text": " people.",
+      "speaker": null
+    }
+  ],
+  "inferred_languages": [
+    "en"
+  ],
+  "diarization_segments": []
+}

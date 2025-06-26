@@ -57,11 +57,23 @@ export async function POST(request: NextRequest) {
     // Use fal.ai client to call the Whisper API
     const whisperResult = await fal.subscribe('fal-ai/whisper', {
       input: {
-        audio_url: audioUrl
-      }
+        audio_url: audioUrl,
+        task: "transcribe",
+        chunk_level: "word",
+        version: "3",
+        batch_size: 8,
+      },
+      logs: true,
+      onQueueUpdate: (update) => {
+        if (update.status === "IN_PROGRESS") {
+          update.logs.map((log) => log.message).forEach(console.log);
+        }
+      },
     })
 
-    console.log('Whisper transcription completed:', whisperResult.data)
+    // Log the complete whisperResult object
+    console.log('Raw Whisper API response:', whisperResult)
+    // console.log('Whisper transcription completed:', whisperResult.data)
     
     // Transform fal.ai response to match expected format for compatibility
     const transformedResult = {
