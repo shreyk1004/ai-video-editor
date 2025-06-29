@@ -33,8 +33,6 @@ export default function AIVideoEditor() {
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(180) // 3 minutes
-  const [isProcessing, setIsProcessing] = useState(false)
-  const [processingProgress, setProcessingProgress] = useState(0)
   const [selectedLanguage, setSelectedLanguage] = useState("en")
   const [fillerWordsDetected, setFillerWordsDetected] = useState(47)
   const [uploadedVideo, setUploadedVideo] = useState<string | null>(null)
@@ -57,35 +55,65 @@ export default function AIVideoEditor() {
     text: string,
     start: number,
     end: number,
-    id: string
+    id: string,
+    originalStart: number,
+    originalEnd: number
   }>>([])
   const [activeSegmentId, setActiveSegmentId] = useState<string | null>(null)
   const [isTestMode, setIsTestMode] = useState(false)
   const [cutSegments, setCutSegments] = useState<Array<{start: number, end: number, type: 'filler' | 'pause' | 'transcript'}>>([])
   const [appliedCuts, setAppliedCuts] = useState<Array<{start: number, end: number, type: 'filler' | 'pause' | 'transcript'}>>([])
   
-  // Transcript editing states
+  // Enhanced editing states with edit tracking
   const [selectedWords, setSelectedWords] = useState<Set<string>>(new Set())
   const [deletedWords, setDeletedWords] = useState<Set<string>>(new Set())
   const [isSelectionMode, setIsSelectionMode] = useState(false)
   const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null)
+  const [pendingEdits, setPendingEdits] = useState<Array<{
+    id: string,
+    type: 'deletion' | 'restoration',
+    wordIds: string[],
+    startTime: number,
+    endTime: number,
+    duration: number,
+    text: string,
+    timestamp: number
+  }>>([])
+  const [editIdCounter, setEditIdCounter] = useState(0)
   
   // Drag selection states
   const [isDragging, setIsDragging] = useState(false)
   const [dragStartIndex, setDragStartIndex] = useState<number | null>(null)
   const [dragEndIndex, setDragEndIndex] = useState<number | null>(null)
   const [dragSelection, setDragSelection] = useState<Set<string>>(new Set())
+  
+  // Confirmation message state
+  const [confirmationMessage, setConfirmationMessage] = useState<string | null>(null)
+  
+  // Simple confirmation function
+  const showConfirmation = (message: string) => {
+    setConfirmationMessage(message)
+    setTimeout(() => setConfirmationMessage(null), 2000) // Auto-hide after 2 seconds
+  }
 
   // Test mode constants
   const TEST_AUDIO_URL = "https://v3.fal.media/files/monkey/ReqIwPt26dDZVOVFY-FKf_audio.wav"
   
-  // Function to adjust timestamps: start +0.2s later, end -0.2s earlier
-  const adjustTimestamps = (wordData: Array<any>, startDelay: number = 0.2, endDelay: number = -0.2) => {
+  // Function to adjust timestamps: start +0.1s later, end -0.1s earlier
+  // More conservative adjustments to preserve word beginnings and endings
+  const adjustTimestamps = (wordData: Array<any>, startDelay: number = 0.05, endDelay: number = -0.05) => {
     return wordData.map(word => {
       const originalStart = word.timestamp[0]
       const originalEnd = word.timestamp[1]
+      const originalDuration = originalEnd - originalStart
+      
+      // Apply adjustments but ensure we maintain a minimum duration of 0.1s
       const adjustedStart = Math.max(0, originalStart + startDelay)
-      const adjustedEnd = Math.max(adjustedStart + 0.1, originalEnd + endDelay) // Ensure end is at least 0.1s after start
+      let adjustedEnd = originalEnd + endDelay
+      
+      // If the adjustment would make the duration too small or negative, preserve minimum duration
+      const minDuration = Math.min(0.1, originalDuration * 0.5) // At least 0.1s or half original duration, whichever is smaller
+      adjustedEnd = Math.max(adjustedStart + minDuration, adjustedEnd)
       
       return {
         ...word,
@@ -99,15 +127,15 @@ export default function AIVideoEditor() {
     const rawTestTranscript = kyleTestData.text
     const rawWordData = kyleTestData.chunks
     
-    // Adjust all timestamps: start +0.4s later, end -0.4s earlier
-    const adjustedWordData = adjustTimestamps(rawWordData, 0.4, -0.4)
+    // Adjust all timestamps: start +0.1s later, end -0.1s earlier
+    const adjustedWordData = adjustTimestamps(rawWordData, 0.1, -0.1)
     
     console.log('📊 Timestamp Adjustment Applied:')
     console.log('⏱️ Original first word:', rawWordData[0]?.text, `[${rawWordData[0]?.timestamp[0]}, ${rawWordData[0]?.timestamp[1]}]`)
     console.log('⏱️ Adjusted first word:', adjustedWordData[0]?.text, `[${adjustedWordData[0]?.timestamp[0]}, ${adjustedWordData[0]?.timestamp[1]}]`)
     console.log('⏱️ Original last word:', rawWordData[rawWordData.length - 1]?.text, `[${rawWordData[rawWordData.length - 1]?.timestamp[0]}, ${rawWordData[rawWordData.length - 1]?.timestamp[1]}]`)
     console.log('⏱️ Adjusted last word:', adjustedWordData[adjustedWordData.length - 1]?.text, `[${adjustedWordData[adjustedWordData.length - 1]?.timestamp[0]}, ${adjustedWordData[adjustedWordData.length - 1]?.timestamp[1]}]`)
-    console.log('📏 Timing changes: Start +0.4s, End -0.4s (segments shortened by ~0.8s)')
+    console.log('📏 Timing changes: Start +0.1s, End -0.1s (segments shortened by ~0.2s)')
     
     return {
       transcript: rawTestTranscript,
@@ -140,18 +168,36 @@ export default function AIVideoEditor() {
     console.log('Processing word data in createTranscriptSegmentsFromChunks:', wordData.length)
     console.log('First word example:', wordData[0])
     
-    const segments: Array<{text: string, start: number, end: number, id: string}> = []
+    const segments: Array<{
+      text: string, 
+      start: number, 
+      end: number, 
+      id: string,
+      originalStart: number,
+      originalEnd: number
+    }> = []
     
     wordData.forEach((word, index) => {
       if (word.text && word.text.trim()) {
-        // Use actual timestamps from Whisper - each word has its own timestamp
-        const start = word.timestamp ? word.timestamp[0] : index * 0.5
-        const end = word.timestamp ? word.timestamp[1] : (index + 1) * 0.5
+        // Store both original timestamps (from FAL) and base-adjusted timestamps
+        const originalStart = word.timestamp ? word.timestamp[0] : index * 0.5
+        const originalEnd = word.timestamp ? word.timestamp[1] : (index + 1) * 0.5
+        
+        // Base adjustment: +0.1s start, -0.1s end with minimum duration protection
+        const originalDuration = originalEnd - originalStart
+        const adjustedStart = Math.max(0, originalStart + 0.1)
+        let adjustedEnd = originalEnd - 0.1
+        
+        // Ensure minimum duration
+        const minDuration = Math.min(0.1, originalDuration * 0.5)
+        adjustedEnd = Math.max(adjustedStart + minDuration, adjustedEnd)
         
         const segment = {
           text: word.text.trim(),
-          start: start,
-          end: end,
+          start: adjustedStart,      // Base-adjusted start time
+          end: adjustedEnd,          // Base-adjusted end time
+          originalStart: originalStart,  // Immutable original from FAL
+          originalEnd: originalEnd,      // Immutable original from FAL
           id: `word-${index}`
         }
         
@@ -159,7 +205,11 @@ export default function AIVideoEditor() {
         
         // Log first few segments to debug
         if (index < 5) {
-          console.log(`Segment ${index}:`, segment)
+          console.log(`Segment ${index}:`, {
+            text: segment.text,
+            original: `${originalStart}s-${originalEnd}s`,
+            adjusted: `${adjustedStart.toFixed(2)}s-${adjustedEnd.toFixed(2)}s`
+          })
         }
       }
     })
@@ -201,17 +251,30 @@ export default function AIVideoEditor() {
       })
     }
     
-    const segments: Array<{text: string, start: number, end: number, id: string}> = []
+    const segments: Array<{
+      text: string, 
+      start: number, 
+      end: number, 
+      id: string,
+      originalStart: number,
+      originalEnd: number
+    }> = []
     const totalChars = fullTranscript.length
     
     sentences.forEach((sentence, index) => {
-      const startTime = (sentence.originalStart / totalChars) * videoDuration
-      const endTime = (sentence.originalEnd / totalChars) * videoDuration
+      const originalStartTime = (sentence.originalStart / totalChars) * videoDuration
+      const originalEndTime = (sentence.originalEnd / totalChars) * videoDuration
+      
+      // Apply base adjustment: +0.1s start, -0.1s end
+      const adjustedStart = Math.max(0, originalStartTime + 0.1)
+      const adjustedEnd = Math.max(adjustedStart + 0.1, originalEndTime - 0.1)
       
       segments.push({
         text: sentence.text,
-        start: startTime,
-        end: endTime,
+        start: adjustedStart,
+        end: adjustedEnd,
+        originalStart: originalStartTime,
+        originalEnd: originalEndTime,
         id: `segment-${index}`
       })
     })
@@ -220,11 +283,27 @@ export default function AIVideoEditor() {
   }
 
   // Find the currently active transcript segment based on video time
-  const findActiveSegment = (currentTime: number): {text: string, start: number, end: number, id: string} | null => {
-    // Find the closest word to current time - only one word should be active
-    // Skip deleted words for live tracking and use adjusted timing
-    let closestSegment: {text: string, start: number, end: number, id: string} | null = null
+  const findActiveSegment = (currentTime: number): {
+    text: string, 
+    start: number, 
+    end: number, 
+    id: string,
+    originalStart: number,
+    originalEnd: number
+  } | null => {
+    // Find the closest word to current time using effective timestamps
+    let closestSegment: {
+      text: string, 
+      start: number, 
+      end: number, 
+      id: string,
+      originalStart: number,
+      originalEnd: number
+    } | null = null
     let closestDistance = Infinity
+    
+    // Convert current time to the same coordinate system as word timestamps
+    const effectiveCurrentTime = getAdjustedWordTime(currentTime)
     
     transcriptSegments.forEach((segment, index) => {
       // Skip deleted words - they shouldn't be highlighted during playback
@@ -232,24 +311,12 @@ export default function AIVideoEditor() {
         return
       }
       
-      // Use adjusted timing that accounts for deleted words and extra skips
-      let adjustedStart = getAdjustedWordTime(segment.start)
-      let adjustedEnd = getAdjustedWordTime(segment.end)
+      // Use the new effective timestamp system for accurate timing
+      const effectiveStart = getEffectiveWordTime(index, 'start')
+      const effectiveEnd = getEffectiveWordTime(index, 'end')
       
-      // If this word comes after a deletion, it gets an additional skip
-      if (isWordAfterDeletion(index)) {
-        adjustedStart += 0.5
-        adjustedEnd += 0.5
-      }
-      
-      // If this word comes before a deletion, it ends earlier
-      if (isWordBeforeDeletion(index)) {
-        adjustedEnd -= 0.5
-        console.log(`🎯 Word "${segment.text}" ends 0.5s early (before deletion): ${adjustedEnd}s`)
-      }
-      
-      const distance = Math.abs(currentTime - adjustedStart)
-      const isInRange = currentTime >= adjustedStart && currentTime <= adjustedEnd + 0.2
+      const distance = Math.abs(effectiveCurrentTime - effectiveStart)
+      const isInRange = effectiveCurrentTime >= effectiveStart && effectiveCurrentTime <= effectiveEnd + 0.2
       
       if (isInRange && distance < closestDistance) {
         closestDistance = distance
@@ -496,9 +563,8 @@ export default function AIVideoEditor() {
   const deleteSelectedWords = () => {
     if (selectedWords.size === 0) return
     
-    console.log('🔥 STARTING WORD DELETION DEBUG')
+    console.log('🔥 STARTING ENHANCED WORD DELETION')
     console.log('📊 Total selected words:', selectedWords.size)
-    console.log('📝 Selected word IDs:', Array.from(selectedWords))
     
     // Get the selected word indices to check for consecutive groups
     const selectedIndices = transcriptSegments
@@ -508,26 +574,6 @@ export default function AIVideoEditor() {
     
     if (selectedIndices.length === 0) return
     
-    console.log('📍 Selected word indices (sorted):', selectedIndices)
-    
-    // Show which actual words are selected with their details
-    const selectedWordsDetails = selectedIndices.map(index => {
-      const word = transcriptSegments[index]
-      return {
-        index,
-        id: word.id,
-        text: word.text.trim(),
-        start: word.start,
-        end: word.end,
-        duration: (word.end - word.start).toFixed(3)
-      }
-    })
-    
-    console.log('📝 Selected words details:')
-    selectedWordsDetails.forEach((word, i) => {
-      console.log(`  ${i + 1}. [${word.index}] "${word.text}" (${word.start}s - ${word.end}s, ${word.duration}s duration)`)
-    })
-    
     // Group consecutive indices into ranges
     const consecutiveRanges: Array<{startIndex: number, endIndex: number}> = []
     let currentRangeStart = selectedIndices[0]
@@ -535,70 +581,62 @@ export default function AIVideoEditor() {
     
     for (let i = 1; i < selectedIndices.length; i++) {
       if (selectedIndices[i] === currentRangeEnd + 1) {
-        // Consecutive - extend current range
         currentRangeEnd = selectedIndices[i]
-        console.log(`🔗 Extended range: [${currentRangeStart}-${currentRangeEnd}] (added index ${selectedIndices[i]})`)
       } else {
-        // Gap found - finish current range and start new one
         consecutiveRanges.push({startIndex: currentRangeStart, endIndex: currentRangeEnd})
-        console.log(`✅ Finished range: [${currentRangeStart}-${currentRangeEnd}] (${currentRangeEnd - currentRangeStart + 1} words)`)
         currentRangeStart = selectedIndices[i]
         currentRangeEnd = selectedIndices[i]
-        console.log(`🆕 Started new range: [${currentRangeStart}] (gap at index ${selectedIndices[i]})`)
       }
     }
-    
-    // Add the final range
     consecutiveRanges.push({startIndex: currentRangeStart, endIndex: currentRangeEnd})
-    console.log(`✅ Final range: [${currentRangeStart}-${currentRangeEnd}] (${currentRangeEnd - currentRangeStart + 1} words)`)
     
-    console.log('🎯 CONSECUTIVE RANGES ANALYSIS:')
-    console.log('📊 Total ranges found:', consecutiveRanges.length)
-    consecutiveRanges.forEach((range, index) => {
-      const wordCount = range.endIndex - range.startIndex + 1
-      console.log(`  Range ${index + 1}: indices [${range.startIndex}-${range.endIndex}] = ${wordCount} words`)
-    })
-    
-    // For each consecutive range, create a continuous time deletion
+    // Create pending edits for each consecutive range
     consecutiveRanges.forEach((range, rangeIndex) => {
       const startWord = transcriptSegments[range.startIndex]
       const endWord = transcriptSegments[range.endIndex]
-      const startTime = startWord.start
-      const endTime = endWord.end
-      const totalDuration = endTime - startTime
       
-      console.log(`🎬 RANGE ${rangeIndex + 1} TIME ANALYSIS:`)
-      console.log(`  📍 Start word: "${startWord.text.trim()}" at ${startTime}s`)
-      console.log(`  📍 End word: "${endWord.text.trim()}" at ${endTime}s`)
-      console.log(`  ⏱️ Total time span: ${startTime}s - ${endTime}s (${totalDuration.toFixed(3)}s duration)`)
+      const startTime = Math.max(0, startWord.originalStart - 0.25)
+      const endTime = endWord.originalEnd + 0.25
+      const duration = endTime - startTime
       
-      // Delete ONLY the exact words in this consecutive range, not overlapping words
-      const wordsInRange: Array<{text: string, start: number, end: number, id: string}> = []
+      // Get all word IDs in this range
+      const rangeWordIds: string[] = []
+      const rangeText: string[] = []
       for (let i = range.startIndex; i <= range.endIndex; i++) {
         if (i < transcriptSegments.length) {
-          wordsInRange.push(transcriptSegments[i])
+          rangeWordIds.push(transcriptSegments[i].id)
+          rangeText.push(transcriptSegments[i].text.trim())
         }
       }
       
-      console.log(`🎯 Deleting exact consecutive words in range [${range.startIndex}-${range.endIndex}]:`)
-      wordsInRange.forEach((word, wordIndex) => {
-        console.log(`    ${wordIndex + 1}. "${word.text.trim()}" (${word.start}s-${word.end}s)`)
-      })
+      // Create edit entry
+      const editId = `edit-${editIdCounter + rangeIndex}`
+      const newEdit = {
+        id: editId,
+        type: 'deletion' as const,
+        wordIds: rangeWordIds,
+        startTime,
+        endTime,
+        duration,
+        text: rangeText.join(' '),
+        timestamp: Date.now()
+      }
       
+      console.log(`📝 Created deletion edit: "${newEdit.text}" (${duration.toFixed(2)}s)`)
+      
+      // Add to pending edits
+      setPendingEdits(prev => [...prev, newEdit])
+      
+      // Mark words as deleted
       setDeletedWords(prev => {
         const newDeleted = new Set(prev)
-        const beforeSize = newDeleted.size
-        wordsInRange.forEach(word => newDeleted.add(word.id))
-        const afterSize = newDeleted.size
-        const newlyDeleted = afterSize - beforeSize
-        
-        console.log(`💾 Updated deleted words set: ${beforeSize} → ${afterSize} (+${newlyDeleted} new deletions)`)
-        console.log(`✅ Created 1 continuous deletion range: "${startWord.text.trim()}" to "${endWord.text.trim()}"`)
+        rangeWordIds.forEach(id => newDeleted.add(id))
         return newDeleted
       })
     })
     
-    // Clear selection after deletion
+    // Update edit counter and clear selection
+    setEditIdCounter(prev => prev + consecutiveRanges.length)
     setSelectedWords(new Set())
     setLastSelectedIndex(null)
     
@@ -606,34 +644,155 @@ export default function AIVideoEditor() {
       return total + (range.endIndex - range.startIndex + 1)
     }, 0)
     
-    const totalTimeDeleted = consecutiveRanges.reduce((total, range) => {
-      const startWord = transcriptSegments[range.startIndex]
-      const endWord = transcriptSegments[range.endIndex]
-      return total + (endWord.end - startWord.start)
-    }, 0)
+    console.log(`✅ Added ${consecutiveRanges.length} deletion edits to pending list`)
+    showConfirmation(`Added ${totalDeletedWords} words to deletion queue`)
+  }
+
+  const restoreSingleWord = (wordId: string, wordIndex: number) => {
+    if (!deletedWords.has(wordId)) {
+      console.log(`❌ Word "${transcriptSegments[wordIndex]?.text}" is not deleted - cannot restore`)
+      return
+    }
     
-    console.log('🎯 DELETION SUMMARY:')
-    console.log(`📊 Ranges created: ${consecutiveRanges.length}`)
-    console.log(`📝 Words originally selected: ${totalDeletedWords}`)
-    console.log(`⏱️ Total time to be deleted: ${totalTimeDeleted.toFixed(3)}s`)
-    console.log(`✅ Deletion process complete!`)
-    console.log('─'.repeat(80))
+    console.log('🔄 RESTORING SINGLE WORD - SIMPLE APPROACH')
+    const word = transcriptSegments[wordIndex]
+    
+    // 1. Remove from deleted words (word becomes normal immediately)
+    setDeletedWords(prev => {
+      const newDeleted = new Set(prev)
+      newDeleted.delete(wordId)
+      console.log(`💾 Restored word "${word.text.trim()}" - deleted count: ${prev.size} → ${newDeleted.size}`)
+      return newDeleted
+    })
+    
+    // 2. Remove any existing deletion edits that contain this word
+    setPendingEdits(prev => {
+      const editsWithoutThisWord = prev.filter(edit => {
+        if (edit.type === 'deletion' && edit.wordIds.includes(wordId)) {
+          console.log(`🗑️ Removing deletion edit that contained "${word.text.trim()}": "${edit.text}"`)
+          return false
+        }
+        return true
+      })
+      
+      // 3. Add restoration edit to the list
+      const startTime = Math.max(0, word.originalStart - 0.25)
+      const endTime = word.originalEnd + 0.25
+      const duration = endTime - startTime
+      
+      const restorationEdit = {
+        id: `restore-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        type: 'restoration' as const,
+        wordIds: [wordId],
+        startTime,
+        endTime,
+        duration,
+        text: word.text.trim(),
+        timestamp: Date.now()
+      }
+      
+      return [...editsWithoutThisWord, restorationEdit]
+    })
+    
+    console.log(`✅ Simple restoration: "${word.text.trim()}" is now normal, deletion edits removed, restoration edit added`)
+    showConfirmation(`Restored "${word.text.trim()}"`)
+  }
+  
+  // Helper function to find consecutive deleted range around a word
+  const findConsecutiveDeletedRange = (wordIndex: number) => {
+    let startIndex = wordIndex
+    let endIndex = wordIndex
+    
+    // Expand backwards to find start of consecutive deleted words
+    while (startIndex > 0 && deletedWords.has(transcriptSegments[startIndex - 1].id)) {
+      startIndex--
+    }
+    
+    // Expand forwards to find end of consecutive deleted words
+    while (endIndex < transcriptSegments.length - 1 && deletedWords.has(transcriptSegments[endIndex + 1].id)) {
+      endIndex++
+    }
+    
+    return { startIndex, endIndex }
   }
 
   const restoreSelectedWords = () => {
     if (selectedWords.size === 0) return
     
+    console.log('🔄 STARTING SIMPLE MULTI-WORD RESTORATION')
+    console.log('📊 Total selected words for restoration:', selectedWords.size)
+    
+    // Get only the words that are actually deleted
+    const deletedSelectedWords = Array.from(selectedWords).filter(wordId => deletedWords.has(wordId))
+    
+    if (deletedSelectedWords.length === 0) {
+      console.log('❌ No selected words are currently deleted - nothing to restore')
+      return
+    }
+    
+    console.log(`📝 Restoring ${deletedSelectedWords.length} deleted words`)
+    
+    // 1. Remove all selected words from deleted set (words become normal immediately)
     setDeletedWords(prev => {
       const newDeleted = new Set(prev)
-      selectedWords.forEach(wordId => newDeleted.delete(wordId))
+      const beforeSize = newDeleted.size
+      deletedSelectedWords.forEach(wordId => newDeleted.delete(wordId))
+      const afterSize = newDeleted.size
+      const restoredCount = beforeSize - afterSize
+      
+      console.log(`💾 Updated deleted words set: ${beforeSize} → ${afterSize} (-${restoredCount} restored)`)
       return newDeleted
+    })
+    
+    // 2. Remove deletion edits that contain any of these words and add restoration edits
+    setPendingEdits(prev => {
+      // Remove any deletion edits that contain the restored words
+      const editsWithoutRestoredWords = prev.filter(edit => {
+        if (edit.type === 'deletion') {
+          const hasRestoredWord = edit.wordIds.some(wordId => deletedSelectedWords.includes(wordId))
+          if (hasRestoredWord) {
+            const restoredWords = edit.wordIds.filter(wordId => deletedSelectedWords.includes(wordId))
+            console.log(`🗑️ Removing deletion edit containing restored words: "${restoredWords.map(id => {
+              const word = transcriptSegments.find(w => w.id === id)
+              return word ? word.text.trim() : id
+            }).join(', ')}" from "${edit.text}"`)
+            return false
+          }
+        }
+        return true
+      })
+      
+      // Create restoration edits for each word
+      const restorationEdits = deletedSelectedWords.map(wordId => {
+        const wordIndex = transcriptSegments.findIndex(w => w.id === wordId)
+        if (wordIndex < 0) return null
+        
+        const word = transcriptSegments[wordIndex]
+        const startTime = Math.max(0, word.originalStart - 0.25)
+        const endTime = word.originalEnd + 0.25
+        const duration = endTime - startTime
+        
+        return {
+          id: `restore-${Date.now()}-${Math.random().toString(36).substr(2, 9)}-${wordId}`,
+          type: 'restoration' as const,
+          wordIds: [wordId],
+          startTime,
+          endTime,
+          duration,
+          text: word.text.trim(),
+          timestamp: Date.now()
+        }
+      }).filter(edit => edit !== null)
+      
+      return [...editsWithoutRestoredWords, ...restorationEdits]
     })
     
     // Clear selection after restoration
     setSelectedWords(new Set())
     setLastSelectedIndex(null)
     
-    console.log(`Restored ${selectedWords.size} words`)
+    console.log(`✅ Simple multi-word restoration complete: ${deletedSelectedWords.length} words restored, deletion edits removed`)
+    showConfirmation(`Restored ${deletedSelectedWords.length} words`)
   }
 
   const selectAllWords = () => {
@@ -651,11 +810,31 @@ export default function AIVideoEditor() {
   const clearAllDeletions = () => {
     if (deletedWords.size === 0) return
     
-    const confirmed = confirm(`Clear all ${deletedWords.size} deleted words?\n\nThis will restore all struck-through words to normal state.`)
-    if (confirmed) {
-      setDeletedWords(new Set())
-      console.log('Cleared all word deletions')
-    }
+    const deletedCount = deletedWords.size
+    console.log('🔄 CLEARING ALL DELETIONS')
+    console.log(`📊 Total deleted words: ${deletedCount}`)
+    
+    // Remove all transcript-based cuts from cut segments
+    setCutSegments(prev => {
+      const transcriptCuts = prev.filter(cut => cut.type === 'transcript')
+      const otherCuts = prev.filter(cut => cut.type !== 'transcript')
+      
+      console.log(`📹 Removing ${transcriptCuts.length} transcript-based video cuts`)
+      transcriptCuts.forEach(cut => {
+        console.log(`  🔄 Removing cut: ${cut.start}s-${cut.end}s`)
+      })
+      
+      return otherCuts
+    })
+    
+    // Clear all word deletions
+    setDeletedWords(new Set())
+    
+    console.log('✅ All word deletions cleared and video cuts removed')
+    console.log('─'.repeat(80))
+    
+    // Show simple confirmation
+    showConfirmation(`Cleared all ${deletedCount} deletions`)
   }
 
   const getSelectedWordsTimeRange = () => {
@@ -698,10 +877,57 @@ export default function AIVideoEditor() {
     return true
   }
 
-  // Calculate adjusted timestamp for a word based on deleted words before it
+  // Calculate effective timestamp for a word accounting for ALL adjustments:
+      // 1. Base ±0.1s adjustment (already in word.start/end)
+  // 2. Deletion-based timeline shifts
+  // 3. Extra skip adjustments (+0.5s after deletions, -0.8s before deletions)
+  const getEffectiveWordTime = (wordIndex: number, timeType: 'start' | 'end' = 'start') => {
+    if (wordIndex < 0 || wordIndex >= transcriptSegments.length) {
+      return 0
+    }
+    
+    const word = transcriptSegments[wordIndex]
+    
+    // Start with base-adjusted time (already includes ±0.1s from FAL data)
+    let effectiveTime = timeType === 'start' ? word.start : word.end
+    
+    // Step 1: Account for deleted words that came before this word (timeline shift)
+    if (deletedWords.size > 0) {
+      let totalRemovedTime = 0
+      
+      // Get all deleted words that end before this word's ORIGINAL position
+      const originalTimeReference = timeType === 'start' ? word.originalStart : word.originalEnd
+      
+      transcriptSegments.forEach((segment, segmentIndex) => {
+        if (deletedWords.has(segment.id) && segment.originalEnd <= originalTimeReference) {
+          // Use original duration for calculating removed time
+          const removedDuration = segment.originalEnd - segment.originalStart
+          totalRemovedTime += removedDuration
+        }
+      })
+      
+      effectiveTime -= totalRemovedTime
+    }
+    
+    // Step 2: Apply extra skip adjustments based on neighboring deletions
+    if (isWordAfterDeletion(wordIndex)) {
+      effectiveTime += 0.5  // Extra skip after deletions
+    }
+    
+    if (isWordBeforeDeletion(wordIndex) && timeType === 'end') {
+      effectiveTime -= 0.8  // Early cutoff before deletions
+    }
+    
+    return Math.max(0, effectiveTime)
+  }
+  
+  // Legacy function - kept for compatibility but should migrate to getEffectiveWordTime
   const getAdjustedWordTime = (originalTime: number) => {
+    // NOTE: originalTime is already adjusted by ±0.4s from getTestData() or detectFillerWordsWithFal()
+    // This function only handles deletion-based timing adjustments
+    
     if (deletedWords.size === 0) {
-      // No deletions, return original time
+      // No deletions, return the already-adjusted time as-is
       return originalTime
     }
     
@@ -723,14 +949,8 @@ export default function AIVideoEditor() {
       totalRemovedTime += segmentDuration
     })
     
-    // Add extra skip time if this word comes right after a deletion
-    let extraSkip = 0
-    if (currentWordIndex >= 0 && isWordAfterDeletion(currentWordIndex)) {
-      extraSkip = 0.5 // Additional 0.5s skip after deleted words
-      console.log(`🎯 Adding extra 0.5s skip for word "${transcriptSegments[currentWordIndex]?.text}" (comes after deletion)`)
-    }
-    
-    const adjustedTime = originalTime - totalRemovedTime - extraSkip
+    // The adjusted time accounts for deleted content before this point
+    const adjustedTime = originalTime - totalRemovedTime
     return adjustedTime
   }
 
@@ -800,40 +1020,31 @@ export default function AIVideoEditor() {
   }
 
   const handleProcess = async () => {
-    setIsProcessing(true)
-    setProcessingProgress(0)
-
-    // First run the AI analysis
+    // Run the AI analysis
     await analyzeAudioForAI()
-
-    // Then simulate the enhancement process
-    const interval = setInterval(() => {
-      setProcessingProgress((prev) => {
-        if (prev >= 100) {
-          clearInterval(interval)
-          setIsProcessing(false)
-          return 100
-        }
-        return prev + 2
-      })
-    }, 100)
   }
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (file) {
-      console.log('File selected:', file.name, 'Type:', file.type, 'Size:', file.size)
+      console.log('🎬 File selected for upload...')
       
-      // Check if it's a video file (more flexible check)
-      const isVideoFile = file.type.startsWith('video/') || 
-                         file.name.toLowerCase().endsWith('.mov') ||
-                         file.name.toLowerCase().endsWith('.mp4') ||
-                         file.name.toLowerCase().endsWith('.avi') ||
-                         file.name.toLowerCase().endsWith('.webm') ||
-                         file.name.toLowerCase().endsWith('.mkv')
+      // Enhanced video file detection
+      const fileInfo = getVideoFileInfo(file)
+      console.log('📁 File analysis:', fileInfo)
       
-      if (isVideoFile) {
-        console.log('Video file accepted, creating object URL...')
+      if (fileInfo.isVideoFile) {
+        const { format } = fileInfo
+        console.log(`✅ ${format?.name.toUpperCase()} video accepted:`, {
+          size: fileInfo.file.sizeFormatted,
+          compatibility: format?.transcriptionCompatibility,
+          browserSupport: format?.browserSupport
+        })
+        
+        if (format?.transcriptionCompatibility === 'low') {
+          console.warn('⚠️ This video format may have transcription issues. Consider converting to MP4.')
+        }
+        
         const videoUrl = URL.createObjectURL(file)
         setUploadedVideo(videoUrl)
         
@@ -859,10 +1070,10 @@ export default function AIVideoEditor() {
         setActiveSegmentId(null)
         setAudioData(null)
         
-        console.log('Video uploaded successfully:', videoUrl)
+        console.log('🎥 Video uploaded successfully:', videoUrl)
       } else {
-        console.error('Unsupported file type:', file.type, 'File name:', file.name)
-        alert('Please select a valid video file (.mp4, .mov, .avi, .webm, .mkv)')
+        console.error('❌ Unsupported file type:', file.type, 'File name:', file.name)
+        showConfirmation(`Unsupported file format. Please select MP4, MOV, WebM, or AVI files.`)
       }
     }
   }
@@ -875,18 +1086,24 @@ export default function AIVideoEditor() {
     const file = files[0]
     
     if (file) {
-      console.log('File dropped:', file.name, 'Type:', file.type, 'Size:', file.size)
+      console.log('🎬 File dropped for upload...')
       
-      // Check if it's a video file (more flexible check)
-      const isVideoFile = file.type.startsWith('video/') || 
-                         file.name.toLowerCase().endsWith('.mov') ||
-                         file.name.toLowerCase().endsWith('.mp4') ||
-                         file.name.toLowerCase().endsWith('.avi') ||
-                         file.name.toLowerCase().endsWith('.webm') ||
-                         file.name.toLowerCase().endsWith('.mkv')
+      // Enhanced video file detection
+      const fileInfo = getVideoFileInfo(file)
+      console.log('📁 Dropped file analysis:', fileInfo)
       
-      if (isVideoFile) {
-        console.log('Video file accepted, creating object URL...')
+      if (fileInfo.isVideoFile) {
+        const { format } = fileInfo
+        console.log(`✅ ${format?.name.toUpperCase()} video accepted via drop:`, {
+          size: fileInfo.file.sizeFormatted,
+          compatibility: format?.transcriptionCompatibility,
+          browserSupport: format?.browserSupport
+        })
+        
+        if (format?.transcriptionCompatibility === 'low') {
+          console.warn('⚠️ This video format may have transcription issues. Consider converting to MP4.')
+        }
+        
         const videoUrl = URL.createObjectURL(file)
         setUploadedVideo(videoUrl)
         
@@ -912,10 +1129,10 @@ export default function AIVideoEditor() {
         setActiveSegmentId(null)
         setAudioData(null)
         
-        console.log('Video uploaded successfully via drag and drop:', videoUrl)
+        console.log('🎥 Video uploaded successfully via drag and drop:', videoUrl)
       } else {
-        console.error('Unsupported file type:', file.type, 'File name:', file.name)
-        alert('Please select a valid video file (.mp4, .mov, .avi, .webm, .mkv)')
+        console.error('❌ Unsupported file type:', file.type, 'File name:', file.name)
+        showConfirmation(`Unsupported file format. Please select MP4, MOV, WebM, or AVI files.`)
       }
     }
   }
@@ -1270,38 +1487,485 @@ export default function AIVideoEditor() {
     return pauses
   }
 
-  const extractAudioForTranscription = async (videoBlob: Blob): Promise<Blob> => {
-    // Create audio context for audio extraction
-    const audioContext = new AudioContext()
+  // Enhanced video file type checking with detailed codec support information
+  const getVideoFileInfo = (file: File) => {
+    const fileName = file.name.toLowerCase()
+    const fileType = file.type.toLowerCase()
     
-    try {
-      console.log('Extracting audio from video blob...')
-      console.log('Input video blob size:', videoBlob.size, 'bytes')
-      console.log('Input video blob type:', videoBlob.type)
-      
-      // Convert video blob to array buffer
-      const arrayBuffer = await videoBlob.arrayBuffer()
-      console.log('Video array buffer size:', arrayBuffer.byteLength, 'bytes')
-      
-      // Decode audio data
-      const audioBuffer = await audioContext.decodeAudioData(arrayBuffer)
-      console.log('Audio buffer decoded successfully:')
-      console.log('- Duration:', audioBuffer.duration, 'seconds')
-      console.log('- Sample rate:', audioBuffer.sampleRate, 'Hz')
-      console.log('- Channels:', audioBuffer.numberOfChannels)
-      console.log('- Length:', audioBuffer.length, 'samples')
-      
-      // Convert to WAV format for API submission
-      const wavBlob = audioBufferToWav(audioBuffer)
-      console.log('Generated WAV blob size:', wavBlob.size, 'bytes')
-      
-      audioContext.close()
-      return wavBlob
-    } catch (error) {
-      console.error('Error during audio extraction:', error)
-      audioContext.close()
-      throw error
+    // Enhanced video file detection with codec awareness
+    const videoFormats = {
+      mp4: {
+        extensions: ['.mp4', '.m4v'],
+        mimeTypes: ['video/mp4', 'video/x-m4v'],
+        commonCodecs: ['H.264', 'H.265/HEVC', 'AAC', 'MP3'],
+        browserSupport: 'excellent',
+        transcriptionCompatibility: 'high'
+      },
+      mov: {
+        extensions: ['.mov', '.qt'],
+        mimeTypes: ['video/quicktime', 'video/mov'],
+        commonCodecs: ['H.264', 'ProRes', 'AAC', 'ALAC', 'PCM'],
+        browserSupport: 'variable',
+        transcriptionCompatibility: 'medium'
+      },
+      webm: {
+        extensions: ['.webm'],
+        mimeTypes: ['video/webm'],
+        commonCodecs: ['VP8', 'VP9', 'AV1', 'Vorbis', 'Opus'],
+        browserSupport: 'good',
+        transcriptionCompatibility: 'high'
+      },
+      avi: {
+        extensions: ['.avi'],
+        mimeTypes: ['video/avi', 'video/x-msvideo'],
+        commonCodecs: ['Various legacy codecs'],
+        browserSupport: 'limited',
+        transcriptionCompatibility: 'low'
+      },
+      mkv: {
+        extensions: ['.mkv'],
+        mimeTypes: ['video/x-matroska'],
+        commonCodecs: ['H.264', 'H.265', 'VP9', 'AAC', 'FLAC'],
+        browserSupport: 'limited',
+        transcriptionCompatibility: 'medium'
+      }
     }
+    
+    // Determine format
+    let detectedFormat = null
+    for (const [format, info] of Object.entries(videoFormats)) {
+      const extensionMatch = info.extensions.some(ext => fileName.endsWith(ext))
+      const mimeMatch = info.mimeTypes.some(mime => fileType === mime)
+      
+      if (extensionMatch || mimeMatch) {
+        detectedFormat = { name: format, ...info }
+        break
+      }
+    }
+    
+    // Generic video/* fallback
+    if (!detectedFormat && fileType.startsWith('video/')) {
+      detectedFormat = {
+        name: 'unknown',
+        extensions: [fileName.slice(fileName.lastIndexOf('.'))],
+        mimeTypes: [fileType],
+        commonCodecs: ['Unknown'],
+        browserSupport: 'unknown',
+        transcriptionCompatibility: 'unknown'
+      }
+    }
+    
+    return {
+      isVideoFile: detectedFormat !== null,
+      format: detectedFormat,
+      file: {
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        sizeFormatted: `${(file.size / (1024 * 1024)).toFixed(1)}MB`
+      }
+    }
+  }
+
+  // Strategy 2: Extract audio using a temporary video element (more compatible)
+  const extractAudioViaVideoElement = async (videoBlob: Blob): Promise<Blob> => {
+    return new Promise((resolve, reject) => {
+      const videoElement = document.createElement('video')
+      videoElement.muted = true // Prevent audio output during processing
+      
+      videoElement.onloadedmetadata = async () => {
+        try {
+          console.log('🎥 Video metadata loaded:', {
+            duration: `${videoElement.duration.toFixed(2)}s`,
+            videoWidth: videoElement.videoWidth,
+            videoHeight: videoElement.videoHeight
+          })
+          
+          // For problematic formats like .mov, just send the original blob
+          // The server/API can handle format conversion better than the browser
+          console.log('📤 Using original video blob for transcription API')
+          resolve(videoBlob)
+          
+        } catch (error) {
+          reject(error)
+        } finally {
+          URL.revokeObjectURL(videoElement.src)
+        }
+      }
+      
+      videoElement.onerror = (e) => {
+        console.error('Video element error:', e)
+        URL.revokeObjectURL(videoElement.src)
+        reject(new Error(`Video format not supported by browser: ${videoBlob.type}`))
+      }
+      
+      // Load video blob
+      videoElement.src = URL.createObjectURL(videoBlob)
+      videoElement.load()
+    })
+  }
+  
+  // Strategy 3: Create minimal test audio as absolute fallback
+  const createMinimalTestAudio = (): Blob => {
+    const sampleRate = 44100
+    const duration = 1 // 1 second of silence
+    const numSamples = sampleRate * duration
+    const buffer = new ArrayBuffer(44 + numSamples * 2) // WAV header + data
+    const view = new DataView(buffer)
+    
+    // Minimal WAV header
+    const writeString = (offset: number, string: string) => {
+      for (let i = 0; i < string.length; i++) {
+        view.setUint8(offset + i, string.charCodeAt(i))
+      }
+    }
+    
+    writeString(0, 'RIFF')
+    view.setUint32(4, buffer.byteLength - 8, true)
+    writeString(8, 'WAVE')
+    writeString(12, 'fmt ')
+    view.setUint32(16, 16, true)
+    view.setUint16(20, 1, true) // PCM
+    view.setUint16(22, 1, true) // Mono
+    view.setUint32(24, sampleRate, true)
+    view.setUint32(28, sampleRate * 2, true)
+    view.setUint16(32, 2, true)
+    view.setUint16(34, 16, true)
+    writeString(36, 'data')
+    view.setUint32(40, numSamples * 2, true)
+    
+    // Silent audio data
+    for (let i = 0; i < numSamples; i++) {
+      view.setInt16(44 + i * 2, 0, true)
+    }
+    
+    return new Blob([buffer], { type: 'audio/wav' })
+  }
+
+    // Enhanced audio extraction optimized for MP3 output
+  const extractAudioForTranscription = async (videoBlob: Blob): Promise<Blob> => {
+    console.log('🎵 Starting enhanced audio extraction for FAL Whisper...')
+    console.log('📁 Input video blob:', {
+      size: `${(videoBlob.size / (1024 * 1024)).toFixed(1)}MB`,
+      type: videoBlob.type
+    })
+    
+    // Enhanced MP4 debugging and strategy selection
+    if (videoBlob.type.includes('mp4')) {
+      console.log('🎬 MP4 DETECTED - Using optimized MP3 extraction')
+      console.log('💡 Skipping AudioContext (unreliable timestamps) → Direct MP3 extraction')
+      
+      // For MP4s, skip Strategy 1 and go straight to MP3 extraction
+      try {
+        const mp3Blob = await extractMP3FromVideo(videoBlob)
+        console.log('✅ MP3 extraction successful:', `${(mp3Blob.size / (1024 * 1024)).toFixed(1)}MB`)
+        return mp3Blob
+      } catch (mp3Error) {
+        console.log('❌ MP3 extraction failed:', mp3Error instanceof Error ? mp3Error.message : String(mp3Error))
+        console.log('🔄 Falling back to original MP4 → FAL server-side extraction')
+      }
+    }
+    
+    // Strategy 1: Try direct audio context decoding and convert to high-quality format (Non-MP4 files only)
+    if (!videoBlob.type.includes('mp4')) {
+      try {
+        console.log('🔄 Strategy 1: High-quality AudioContext extraction...')
+        const audioContext = new AudioContext()
+        
+        try {
+          const arrayBuffer = await videoBlob.arrayBuffer()
+          const audioBuffer = await audioContext.decodeAudioData(arrayBuffer)
+          
+          console.log('✅ Direct decoding successful:', {
+            duration: `${audioBuffer.duration.toFixed(2)}s`,
+            sampleRate: `${audioBuffer.sampleRate}Hz`,
+            channels: audioBuffer.numberOfChannels
+          })
+          
+          // Create high-quality WAV with original sample rate and stereo
+          const highQualityWav = audioBufferToHighQualityWav(audioBuffer)
+          audioContext.close()
+          
+          console.log('🎵 Generated high-quality WAV:', `${(highQualityWav.size / (1024 * 1024)).toFixed(1)}MB`)
+          return highQualityWav
+          
+        } catch (decodeError) {
+          console.log('❌ Strategy 1 (AudioContext) failed:', decodeError instanceof Error ? decodeError.message : String(decodeError))
+          audioContext.close()
+          throw decodeError
+        }
+        
+      } catch (directError) {
+        console.log('🔄 Strategy 1 failed, trying Strategy 2...')
+      }
+    }
+    
+    // Strategy 2: Send original video - FAL can extract audio better than browser
+    try {
+      console.log('🔄 Strategy 2: Sending original video to FAL (recommended for .mov/.mp4)...')
+      
+      // Validate video can be processed
+      const isValidVideo = await validateVideoForTranscription(videoBlob)
+      if (isValidVideo) {
+        console.log('✅ Strategy 2 SUCCESS: Video validated for direct FAL processing')
+        console.log('🎯 This approach often yields better transcription quality than browser extraction')
+        if (videoBlob.type.includes('mp4')) {
+          console.log('🎬 MP4 Strategy 2: FAL Whisper will extract audio server-side')
+          console.log('💡 FAL has better codec support than browser AudioContext')
+        }
+        return videoBlob
+      } else {
+        throw new Error('Video validation failed')
+      }
+      
+    } catch (videoError) {
+      console.log('❌ Strategy 2 failed:', videoError instanceof Error ? videoError.message : String(videoError))
+      
+      // Strategy 3: Try basic video element approach
+      console.log('🔄 Strategy 3: Video element validation...')
+      try {
+        const audioBlob = await extractAudioViaVideoElement(videoBlob)
+        console.log('✅ Video element extraction successful')
+        return audioBlob
+        
+      } catch (elementError) {
+        console.log('❌ Strategy 3 failed:', elementError instanceof Error ? elementError.message : String(elementError))
+        
+        // Strategy 4: Create minimal test audio as last resort
+        console.log('🔄 Strategy 4: Creating minimal test audio...')
+        const fallbackBlob = createMinimalTestAudio()
+        console.log('⚠️ Using fallback audio - transcription may not work properly')
+        return fallbackBlob
+      }
+    }
+  }
+
+  // NEW: MP3 extraction function optimized for MP4 files
+  const extractMP3FromVideo = async (videoBlob: Blob): Promise<Blob> => {
+    return new Promise((resolve, reject) => {
+      console.log('🎵 Starting MP3 extraction from MP4...')
+      
+      const video = document.createElement('video')
+      video.muted = true
+      video.crossOrigin = 'anonymous'
+      
+      video.onloadedmetadata = async () => {
+        try {
+          console.log('📹 Video metadata loaded for MP3 extraction:', {
+            duration: `${video.duration.toFixed(2)}s`,
+            hasAudio: !video.muted // Basic check
+          })
+          
+          // Set up MediaRecorder for MP3 output
+          const audioContext = new AudioContext({ sampleRate: 44100 })
+          const source = audioContext.createMediaElementSource(video)
+          const destination = audioContext.createMediaStreamDestination()
+          
+          source.connect(destination)
+          
+          // Check if MP3 recording is supported
+          const mimeTypes = [
+            'audio/mp3',
+            'audio/mpeg',
+            'audio/webm;codecs=opus', // Fallback
+            'audio/webm'
+          ]
+          
+          let selectedMimeType = null
+          for (const mimeType of mimeTypes) {
+            if (MediaRecorder.isTypeSupported(mimeType)) {
+              selectedMimeType = mimeType
+              console.log(`✅ Using MIME type: ${mimeType}`)
+              break
+            }
+          }
+          
+          if (!selectedMimeType) {
+            throw new Error('No supported audio recording format found')
+          }
+          
+          const mediaRecorder = new MediaRecorder(destination.stream, {
+            mimeType: selectedMimeType,
+            audioBitsPerSecond: 128000 // 128kbps for good quality
+          })
+          
+          const audioChunks: Blob[] = []
+          
+          mediaRecorder.ondataavailable = (event) => {
+            if (event.data.size > 0) {
+              audioChunks.push(event.data)
+            }
+          }
+          
+          mediaRecorder.onstop = () => {
+            const audioBlob = new Blob(audioChunks, { 
+              type: selectedMimeType?.includes('mp3') || selectedMimeType?.includes('mpeg') 
+                ? 'audio/mpeg' 
+                : selectedMimeType || 'audio/webm'
+            })
+            
+            console.log('✅ MP3 extraction completed:', {
+              size: `${(audioBlob.size / (1024 * 1024)).toFixed(1)}MB`,
+              type: audioBlob.type,
+              duration: `${video.duration.toFixed(2)}s`
+            })
+            
+            // Cleanup
+            audioContext.close()
+            URL.revokeObjectURL(video.src)
+            
+            resolve(audioBlob)
+          }
+          
+          mediaRecorder.onerror = (event) => {
+            console.error('MediaRecorder error:', event)
+            audioContext.close()
+            URL.revokeObjectURL(video.src)
+            reject(new Error('MediaRecorder failed'))
+          }
+          
+          // Start recording and play video
+          mediaRecorder.start(100) // 100ms chunks
+          
+          video.currentTime = 0
+          await video.play()
+          
+          // Wait for video to finish
+          video.onended = () => {
+            console.log('🎬 Video playback completed, stopping MP3 recording...')
+            mediaRecorder.stop()
+          }
+          
+        } catch (error) {
+          console.error('MP3 extraction setup failed:', error)
+          URL.revokeObjectURL(video.src)
+          reject(error)
+        }
+      }
+      
+      video.onerror = (error) => {
+        console.error('Video loading failed for MP3 extraction:', error)
+        URL.revokeObjectURL(video.src)
+        reject(new Error('Video loading failed'))
+      }
+      
+      // Set timeout
+      const timeout = setTimeout(() => {
+        URL.revokeObjectURL(video.src)
+        reject(new Error('MP3 extraction timeout'))
+      }, 60000) // 1 minute timeout
+      
+      video.onended = () => clearTimeout(timeout)
+      
+      // Load video
+      video.src = URL.createObjectURL(videoBlob)
+      video.load()
+    })
+  }
+
+  // Enhanced WAV creation with better quality for transcription
+  const audioBufferToHighQualityWav = (audioBuffer: AudioBuffer): Blob => {
+    const numChannels = Math.min(audioBuffer.numberOfChannels, 2) // Stereo or mono
+    const sampleRate = audioBuffer.sampleRate // Preserve original sample rate
+    const format = 1 // PCM
+    const bitDepth = 24 // Higher bit depth for better quality
+    
+    const bytesPerSample = bitDepth / 8
+    const blockAlign = numChannels * bytesPerSample
+    const byteRate = sampleRate * blockAlign
+    const dataSize = audioBuffer.length * blockAlign
+    const bufferSize = 44 + dataSize
+    
+    const arrayBuffer = new ArrayBuffer(bufferSize)
+    const view = new DataView(arrayBuffer)
+    
+    // Enhanced WAV header with higher quality settings
+    const writeString = (offset: number, string: string) => {
+      for (let i = 0; i < string.length; i++) {
+        view.setUint8(offset + i, string.charCodeAt(i))
+      }
+    }
+    
+    writeString(0, 'RIFF')
+    view.setUint32(4, bufferSize - 8, true)
+    writeString(8, 'WAVE')
+    writeString(12, 'fmt ')
+    view.setUint32(16, 16, true)
+    view.setUint16(20, format, true)
+    view.setUint16(22, numChannels, true)
+    view.setUint32(24, sampleRate, true)
+    view.setUint32(28, byteRate, true)
+    view.setUint16(32, blockAlign, true)
+    view.setUint16(34, bitDepth, true)
+    writeString(36, 'data')
+    view.setUint32(40, dataSize, true)
+    
+    // Convert audio data with higher precision
+    let offset = 44
+    const maxValue = Math.pow(2, bitDepth - 1) - 1
+    const minValue = -Math.pow(2, bitDepth - 1)
+    
+    for (let i = 0; i < audioBuffer.length; i++) {
+      for (let channel = 0; channel < numChannels; channel++) {
+        const channelData = audioBuffer.getChannelData(channel)
+        const sample = Math.max(-1, Math.min(1, channelData[i]))
+        const intSample = Math.round(sample * (sample < 0 ? -minValue : maxValue))
+        
+        // Write 24-bit sample
+        const clampedSample = Math.max(minValue, Math.min(maxValue, intSample))
+        view.setInt8(offset, clampedSample & 0xFF)
+        view.setInt8(offset + 1, (clampedSample >> 8) & 0xFF)
+        view.setInt8(offset + 2, (clampedSample >> 16) & 0xFF)
+        offset += 3
+      }
+    }
+    
+    console.log('📊 High-quality WAV created:', {
+      sampleRate: `${sampleRate}Hz`,
+      channels: numChannels,
+      bitDepth: `${bitDepth}-bit`,
+      duration: `${audioBuffer.duration.toFixed(2)}s`
+    })
+    
+    return new Blob([arrayBuffer], { type: 'audio/wav' })
+  }
+  
+  // Validate video for direct transcription
+  const validateVideoForTranscription = async (videoBlob: Blob): Promise<boolean> => {
+    return new Promise((resolve) => {
+      const video = document.createElement('video')
+      video.muted = true
+      
+      const timeout = setTimeout(() => {
+        cleanup()
+        resolve(false)
+      }, 5000) // 5 second timeout
+      
+      const cleanup = () => {
+        clearTimeout(timeout)
+        if (video.src) URL.revokeObjectURL(video.src)
+      }
+      
+      video.onloadedmetadata = () => {
+        const isValid = video.duration > 0 && video.videoWidth > 0
+        console.log('📹 Video validation:', {
+          duration: `${video.duration.toFixed(2)}s`,
+          dimensions: `${video.videoWidth}x${video.videoHeight}`,
+          valid: isValid
+        })
+        cleanup()
+        resolve(isValid)
+      }
+      
+      video.onerror = () => {
+        console.log('❌ Video validation failed - format not supported by browser')
+        cleanup()
+        resolve(false)
+      }
+      
+      video.src = URL.createObjectURL(videoBlob)
+      video.load()
+    })
   }
 
   const audioBufferToWav = (audioBuffer: AudioBuffer): Blob => {
@@ -1395,18 +2059,39 @@ export default function AIVideoEditor() {
       console.log('Transcription text:', transcriptionText)
       console.log('Total words found:', wordsData.length)
       
-      // Apply timestamp adjustment: start +0.2s later, end -0.2s earlier
+      // Enhanced MP4 debugging
+      if (audioBlob.type?.includes('mp4') || result.metadata?.isVideo) {
+        console.log('🎬 MP4 TRANSCRIPTION ANALYSIS:')
+        console.log('📊 Result structure:', {
+          hasText: !!transcriptionText,
+          textLength: transcriptionText.length,
+          hasWords: !!wordsData,
+          wordsCount: wordsData.length,
+          wordsSample: wordsData.slice(0, 2)
+        })
+        
+        if (wordsData.length === 0 && transcriptionText.length === 0) {
+          console.error('❌ MP4 TRANSCRIPTION FAILED: No text or words returned')
+          console.error('🔍 Possible causes:')
+          console.error('  - MP4 has no audio track')
+          console.error('  - MP4 audio codec not supported by FAL')
+          console.error('  - Audio track corrupted or encrypted')
+          console.error('  - File upload issue')
+        }
+      }
+      
+      // Apply timestamp adjustment: start +0.1s later, end -0.1s earlier
       let adjustedWordsData = wordsData
       if (wordsData && wordsData.length > 0) {
-        adjustedWordsData = adjustTimestamps(wordsData, 0.4, -0.4)
-        console.log('📊 Applied timestamp adjustment to real video data: Start +0.4s, End -0.4s')
+        adjustedWordsData = adjustTimestamps(wordsData, 0.1, -0.1)
+        console.log('📊 Applied timestamp adjustment to real video data: Start +0.1s, End -0.1s')
         console.log('⏱️ Original first word:', wordsData[0]?.text, `[${wordsData[0]?.timestamp[0]}, ${wordsData[0]?.timestamp[1]}]`)
         console.log('⏱️ Adjusted first word:', adjustedWordsData[0]?.text, `[${adjustedWordsData[0]?.timestamp[0]}, ${adjustedWordsData[0]?.timestamp[1]}]`)
         
         // Show duration change for first word as example
         const originalDuration = wordsData[0]?.timestamp[1] - wordsData[0]?.timestamp[0]
         const adjustedDuration = adjustedWordsData[0]?.timestamp[1] - adjustedWordsData[0]?.timestamp[0]
-        console.log('📏 Duration change example:', `${originalDuration.toFixed(3)}s → ${adjustedDuration.toFixed(3)}s (${(adjustedDuration - originalDuration).toFixed(3)}s difference, -0.8s total)`)
+        console.log('📏 Duration change example:', `${originalDuration.toFixed(3)}s → ${adjustedDuration.toFixed(3)}s (${(adjustedDuration - originalDuration).toFixed(3)}s difference, -0.2s total)`)
       }
       
       // Log actual word data properly (not truncated)
@@ -1421,6 +2106,27 @@ export default function AIVideoEditor() {
           timestamp: wordsData[0].timestamp,
           speaker: wordsData[0].speaker
         })
+        
+        // Validate word data structure for MP4 debugging
+        if (audioBlob.type?.includes('mp4') || result.metadata?.isVideo) {
+          console.log('🎬 MP4 WORD DATA VALIDATION:')
+          const firstWord = wordsData[0]
+          const validations = {
+            hasText: !!firstWord?.text,
+            hasTimestamp: !!firstWord?.timestamp,
+            timestampIsArray: Array.isArray(firstWord?.timestamp),
+            timestampLength: firstWord?.timestamp?.length || 0,
+            timestampValues: firstWord?.timestamp || 'missing'
+          }
+          console.log('📊 First word validation:', validations)
+          
+          if (!validations.hasText || !validations.hasTimestamp) {
+            console.error('❌ MP4 WORD DATA CORRUPTION: Missing required fields')
+          }
+          if (!validations.timestampIsArray || validations.timestampLength !== 2) {
+            console.error('❌ MP4 TIMESTAMP FORMAT ERROR: Expected [start, end] array')
+          }
+        }
       }
       
       // Extract filler words from transcription with precise matching using the adjusted word data
@@ -1451,7 +2157,7 @@ export default function AIVideoEditor() {
         const isVariation = ['umm', 'uhh', 'ahh', 'errr', 'emmm'].includes(cleanWord)
         
         if (isDefiniteFillerWord || isShortHesitation || isVariation) {
-          console.log(`Found filler word: "${cleanWord}" at adjusted timestamp [${wordObj.timestamp[0]}, ${wordObj.timestamp[1]}] (start +0.4s, end -0.4s)`)
+          console.log(`Found filler word: "${cleanWord}" at adjusted timestamp [${wordObj.timestamp[0]}, ${wordObj.timestamp[1]}] (start +0.1s, end -0.1s)`)
           
           detectedFillers.push({
             word: cleanWord,
@@ -1466,7 +2172,14 @@ export default function AIVideoEditor() {
       setTranscription(transcriptionText)
       
       // Create interactive transcript segments from words data
-      let segments: Array<{text: string, start: number, end: number, id: string}> = []
+      let segments: Array<{
+        text: string, 
+        start: number, 
+        end: number, 
+        id: string,
+        originalStart: number,
+        originalEnd: number
+      }> = []
       if (adjustedWordsData && adjustedWordsData.length > 0) {
         console.log('Using word-level data for transcript segments')
         console.log('Raw words structure:', wordsData.slice(0, 3)) // Show first 3 words
@@ -1875,183 +2588,94 @@ export default function AIVideoEditor() {
     }, 0)
    }
 
-  const applyTranscriptEdits = () => {
-    if (deletedWords.size === 0) {
-      alert('No words deleted to apply!')
-      return
-    }
+  
 
-    console.log('🎬 APPLYING TRANSCRIPT EDITS AS VIDEO CUTS')
-    console.log('📊 Total deleted words:', deletedWords.size)
-
-    // Get all deleted word indices and sort them
-    const deletedIndices = transcriptSegments
-      .map((word, index) => deletedWords.has(word.id) ? index : -1)
-      .filter(index => index !== -1)
-      .sort((a, b) => a - b)
-
-    console.log('📍 Deleted word indices (sorted):', deletedIndices)
-
-    // Group consecutive deleted indices into ranges (same logic as deleteSelectedWords)
-    const consecutiveRanges: Array<{startIndex: number, endIndex: number}> = []
-    let currentRangeStart = deletedIndices[0]
-    let currentRangeEnd = deletedIndices[0]
-
-    for (let i = 1; i < deletedIndices.length; i++) {
-      if (deletedIndices[i] === currentRangeEnd + 1) {
-        // Consecutive - extend current range
-        currentRangeEnd = deletedIndices[i]
-        console.log(`🔗 Extended cut range: [${currentRangeStart}-${currentRangeEnd}]`)
-      } else {
-        // Gap found - finish current range and start new one
-        consecutiveRanges.push({startIndex: currentRangeStart, endIndex: currentRangeEnd})
-        console.log(`✅ Finished cut range: [${currentRangeStart}-${currentRangeEnd}] (${currentRangeEnd - currentRangeStart + 1} words)`)
-        currentRangeStart = deletedIndices[i]
-        currentRangeEnd = deletedIndices[i]
-        console.log(`🆕 Started new cut range: [${currentRangeStart}]`)
-      }
-    }
-
-    // Add the final range
-    consecutiveRanges.push({startIndex: currentRangeStart, endIndex: currentRangeEnd})
-    console.log(`✅ Final cut range: [${currentRangeStart}-${currentRangeEnd}] (${currentRangeEnd - currentRangeStart + 1} words)`)
-
-    console.log('🎯 CONSECUTIVE CUT RANGES ANALYSIS:')
-    console.log('📊 Total cut ranges found:', consecutiveRanges.length)
-
-    // Create continuous cut segments for each consecutive range
-    const newCutSegments = consecutiveRanges.map((range, index) => {
-      const startWord = transcriptSegments[range.startIndex]
-      const endWord = transcriptSegments[range.endIndex]
-      const startTime = startWord.start
-      const endTime = endWord.end
-      const duration = endTime - startTime
-
-      console.log(`🎬 CUT RANGE ${index + 1}:`)
-      console.log(`  📍 "${startWord.text.trim()}" to "${endWord.text.trim()}"`)
-      console.log(`  ⏱️ Time: ${startTime}s - ${endTime}s (${duration.toFixed(3)}s duration)`)
-      console.log(`  📝 Words: ${range.endIndex - range.startIndex + 1}`)
-
-      return {
-        start: startTime,
-        end: endTime,
-        type: 'transcript' as const
-      }
-    })
-
-    // Merge with existing cuts and sort by start time
-    const allCuts = [...cutSegments, ...newCutSegments].sort((a, b) => a.start - b.start)
-    setCutSegments(allCuts)
-
-    // Keep deleted words struck through but clear selection states
-    setSelectedWords(new Set())
-    setIsSelectionMode(false)
-    setLastSelectedIndex(null)
-
-    const totalCutTime = newCutSegments.reduce((total, cut) => total + (cut.end - cut.start), 0)
-
-    console.log('🎯 CUT APPLICATION SUMMARY:')
-    console.log(`📊 Cut ranges created: ${newCutSegments.length}`)
-    console.log(`📝 Total deleted words: ${deletedWords.size}`)
-    console.log(`⏱️ Total cut time: ${totalCutTime.toFixed(3)}s`)
-    console.log('✅ Transcript edits applied as continuous video cuts!')
-
-    alert(`✅ Applied ${deletedWords.size} word deletions as ${newCutSegments.length} continuous video cuts!\n\nTotal cut time: ${totalCutTime.toFixed(1)}s\nDeleted words remain struck through and cuts are ready to process.`)
-  }
-
-   const applyCuts = async () => {
-     if (cutSegments.length === 0) {
-       alert('No cuts selected to apply!')
+   const applyEdits = async () => {
+     // Combine traditional cuts and transcript edits
+     const allCuts = [...cutSegments]
+     
+     // Convert pending deletion edits to cut segments
+     const deletionCuts = pendingEdits
+       .filter(edit => edit.type === 'deletion')
+       .map(edit => ({
+         start: edit.startTime,
+         end: edit.endTime,
+         type: 'transcript' as const
+       }))
+     
+     allCuts.push(...deletionCuts)
+     
+     const restorations = pendingEdits.filter(edit => edit.type === 'restoration')
+     
+     if (allCuts.length === 0 && restorations.length === 0) {
+       showConfirmation('No edits to apply')
        return
      }
      
      // Sort cuts by start time for processing
-     const sortedCuts = [...cutSegments].sort((a, b) => a.start - b.start)
+     const sortedCuts = [...allCuts].sort((a, b) => a.start - b.start)
      
-     console.log('Applying cuts to video:', sortedCuts)
+     console.log('Applying edits to video:', {
+       cuts: sortedCuts.length,
+       restorations: restorations.length
+     })
      
-     // Calculate metrics
-     const totalTimeSaved = cutSegments.reduce((total, cut) => total + (cut.end - cut.start), 0)
-     const newDuration = duration - totalTimeSaved
-     const pauseCuts = sortedCuts.filter(cut => cut.type === 'pause').length
+     // Calculate metrics - restorations already removed conflicting deletions
+     // so this calculation should be accurate
+     const totalTimeSaved = sortedCuts.reduce((total, cut) => total + (cut.end - cut.start), 0)
+     const totalTimeRestored = restorations.reduce((total, restoration) => total + restoration.duration, 0)
+     const netTimeSaved = totalTimeSaved - totalTimeRestored
+     const newDuration = duration - netTimeSaved
+     
+     // Apply edits immediately
+     console.log('Applying edits immediately:', {
+       cuts: sortedCuts.length,
+       restorations: restorations.length,
+       netTimeSaved,
+       newDuration: newDuration.toFixed(2) + 's'
+     })
+     
+     // Store the applied cuts for video playback handling (only actual cuts, not restorations)
+     setAppliedCuts(sortedCuts)
+     
+     // Clear all pending edits and cuts since they're now processed
+     setPendingEdits([])
+     setCutSegments([])
+     
+     // Update duration to reflect the net changes
+     setDuration(newDuration)
+     
+     // Update filler words count based on actual applied cuts
      const fillerCuts = sortedCuts.filter(cut => cut.type === 'filler').length
+     setFillerWordsDetected(prev => Math.max(0, prev - fillerCuts))
      
-     // Start processing simulation
-     setIsProcessing(true)
-     setProcessingProgress(0)
+     // Redraw waveform
+     if (audioData) {
+       drawFullWaveform(audioData)
+     } else {
+       drawPlaceholderWaveform()
+     }
      
-     try {
-       // Simulate video processing steps
-       const steps = [
-         { progress: 10, message: 'Analyzing cut points...' },
-         { progress: 25, message: 'Preparing video segments...' },
-         { progress: 40, message: 'Removing pauses and filler words...' },
-         { progress: 60, message: 'Re-encoding video...' },
-         { progress: 80, message: 'Optimizing audio sync...' },
-         { progress: 95, message: 'Finalizing edited video...' },
-         { progress: 100, message: 'Processing complete!' }
-       ]
-       
-       for (const step of steps) {
-         setProcessingProgress(step.progress)
-         console.log(step.message)
-         await new Promise(resolve => setTimeout(resolve, 800)) // Simulate processing time
-       }
-       
-       // Simulate successful completion
-       setTimeout(() => {
-         setIsProcessing(false)
-         setProcessingProgress(0)
-         
-                   // Store the applied cuts for video playback handling
-          setAppliedCuts(sortedCuts)
-          
-          // Clear the pending cuts since they're now processed
-          setCutSegments([])
-          
-          // Update duration to reflect the cuts
-          setDuration(newDuration)
-         
-         // Update filler words count
-         setFillerWordsDetected(prev => Math.max(0, prev - fillerCuts))
-         
-         // Redraw waveform without the cut segments
-         if (audioData) {
-           drawFullWaveform(audioData)
-         } else {
-           drawPlaceholderWaveform()
-         }
-         
-         // Remove the cut segments from detected arrays to simulate they're gone
-         setDetectedPauses(prev => prev.filter(pause => 
-           !sortedCuts.some(cut => 
-             cut.start === pause.start && cut.end === pause.end && cut.type === 'pause'
-           )
-         ))
-         
-         setDetectedFillerWords(prev => prev.filter(filler => 
-           !sortedCuts.some(cut => 
-             cut.start === filler.start && cut.end === filler.end && cut.type === 'filler'
-           )
-         ))
-         
-         // Show success message
-         alert(`✅ Video processing complete!\n\n📊 Results:\n• ${pauseCuts} pauses removed\n• ${fillerCuts} filler words removed\n• ${totalTimeSaved.toFixed(1)} seconds saved\n• New duration: ${formatTime(newDuration)}\n\nYour enhanced video is ready!`)
-         
-         console.log('Video processing simulation complete:', {
-           originalDuration: duration,
-           newDuration,
-           timeSaved: totalTimeSaved,
-           cutsApplied: sortedCuts.length
-         })
-         
-       }, 200)
-       
-     } catch (error) {
-       console.error('Error during video processing:', error)
-       setIsProcessing(false)
-       setProcessingProgress(0)
-       alert('❌ An error occurred during video processing. Please try again.')
+     // Remove the cut segments from detected arrays
+     setDetectedPauses(prev => prev.filter(pause => 
+       !sortedCuts.some(cut => 
+         cut.start === pause.start && cut.end === pause.end && cut.type === 'pause'
+       )
+     ))
+     
+     setDetectedFillerWords(prev => prev.filter(filler => 
+       !sortedCuts.some(cut => 
+         cut.start === filler.start && cut.end === filler.end && cut.type === 'filler'
+       )
+     ))
+     
+     // Show confirmation with edit summary
+     if (netTimeSaved > 0) {
+       showConfirmation(`Edits applied! ${netTimeSaved.toFixed(1)}s saved`)
+     } else if (netTimeSaved < 0) {
+       showConfirmation(`Edits applied! ${Math.abs(netTimeSaved).toFixed(1)}s restored`)
+     } else {
+       showConfirmation(`Edits applied! No net time change`)
      }
    }
 
@@ -2264,7 +2888,7 @@ export default function AIVideoEditor() {
     }
   }, []) // Empty dependency array means this runs once on mount
 
-  // Global mouse events for drag selection
+  // Global mouse events for drag selection and keyboard shortcuts
   useEffect(() => {
     const handleGlobalMouseUp = () => {
       if (isDragging) {
@@ -2283,20 +2907,31 @@ export default function AIVideoEditor() {
       if (e.key === 'Escape' && isDragging) {
         cancelDragSelection()
       }
+      
+      // Delete key support for selected words in edit mode
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        if (isSelectionMode && selectedWords.size > 0) {
+          e.preventDefault()
+          console.log('⌨️ Keyboard delete triggered for', selectedWords.size, 'words')
+          deleteSelectedWords()
+        }
+      }
     }
 
+    // Always listen for delete key, but only during drag for other events
+    document.addEventListener('keydown', handleGlobalKeyDown)
+    
     if (isDragging) {
       document.addEventListener('mouseup', handleGlobalMouseUp)
       document.addEventListener('mousemove', handleGlobalMouseMove)
-      document.addEventListener('keydown', handleGlobalKeyDown)
     }
 
     return () => {
+      document.removeEventListener('keydown', handleGlobalKeyDown)
       document.removeEventListener('mouseup', handleGlobalMouseUp)
       document.removeEventListener('mousemove', handleGlobalMouseMove)
-      document.removeEventListener('keydown', handleGlobalKeyDown)
     }
-  }, [isDragging])
+  }, [isDragging, isSelectionMode, selectedWords])
 
   useEffect(() => {
     return () => {
@@ -2563,38 +3198,7 @@ export default function AIVideoEditor() {
               </Card>
             )}
 
-            {/* Processing Status */}
-            {isProcessing && (
-              <Card>
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-3">
-                    {cutSegments.length > 0 ? (
-                      <Scissors className="w-5 h-5 text-red-600 animate-pulse" />
-                    ) : (
-                      <Zap className="w-5 h-5 text-purple-600 animate-pulse" />
-                    )}
-                    <div className="flex-1">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="font-medium">
-                          {cutSegments.length > 0 ? "Applying Cuts..." : "AI Processing Video..."}
-                        </span>
-                        <span className="text-sm text-gray-600">{processingProgress}%</span>
-                      </div>
-                      <Progress value={processingProgress} className="h-2" />
-                      <div className="text-xs text-gray-500 mt-1">
-                        {processingProgress <= 10 && "Analyzing cut points..."}
-                        {processingProgress > 10 && processingProgress <= 25 && "Preparing video segments..."}
-                        {processingProgress > 25 && processingProgress <= 40 && "Removing pauses and filler words..."}
-                        {processingProgress > 40 && processingProgress <= 60 && "Re-encoding video..."}
-                        {processingProgress > 60 && processingProgress <= 80 && "Optimizing audio sync..."}
-                        {processingProgress > 80 && processingProgress < 100 && "Finalizing edited video..."}
-                        {processingProgress >= 100 && "Processing complete!"}
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
+
 
             {/* Enhanced Interactive Transcript Editor */}
             {transcription && (
@@ -2649,17 +3253,7 @@ export default function AIVideoEditor() {
                         </>
                       )}
                       
-                      {deletedWords.size > 0 && (
-                        <Button
-                          size="sm"
-                          variant="default"
-                          onClick={applyTranscriptEdits}
-                          className="bg-purple-600 hover:bg-purple-700"
-                        >
-                          <Wand2 className="w-3 h-3 mr-1" />
-                          Apply Edits ({deletedWords.size})
-                        </Button>
-                      )}
+
                     </div>
                     
                     <div className="flex items-center gap-2">
@@ -2760,38 +3354,32 @@ export default function AIVideoEditor() {
                     <div className="text-sm leading-relaxed select-none">
                       {transcriptSegments.length > 0 ? (
                         transcriptSegments.map((word, index) => {
-                          // Find the closest word to current time - only highlight one word at a time
-                          // Skip deleted words for live highlighting and use adjusted timing
-                          const adjustedStart = getAdjustedWordTime(word.start)
-                          const adjustedEnd = getAdjustedWordTime(word.end)
-                          const distanceToStart = Math.abs(currentTime - adjustedStart)
+                          // Use the new effective timestamp system for accurate timing
+                          const effectiveCurrentTime = getAdjustedWordTime(currentTime)
+                          const effectiveStart = getEffectiveWordTime(index, 'start')
+                          const effectiveEnd = getEffectiveWordTime(index, 'end')
                           
-                          // Check if this is the closest non-deleted word to the current time (using adjusted timing)
+                          // Calculate distance to this word
+                          const distanceToStart = Math.abs(effectiveCurrentTime - effectiveStart)
+                          
+                          // Check if this is the closest non-deleted word to the current time
                           const isClosestWord = transcriptSegments.every((otherWord, otherIndex) => {
                             if (otherIndex === index) return true
                             // Skip deleted words when finding the closest word
                             if (deletedWords.has(otherWord.id)) return true
-                            const otherAdjustedStart = getAdjustedWordTime(otherWord.start)
-                            const otherDistance = Math.abs(currentTime - otherAdjustedStart)
+                            
+                            const otherEffectiveStart = getEffectiveWordTime(otherIndex, 'start')
+                            const otherDistance = Math.abs(effectiveCurrentTime - otherEffectiveStart)
                             return distanceToStart <= otherDistance
                           })
                           
-                          // Account for extra skip if this word comes after a deletion
-                          let finalAdjustedStart = adjustedStart
-                          let finalAdjustedEnd = adjustedEnd
-                          if (isWordAfterDeletion(index)) {
-                            finalAdjustedStart += 0.5
-                            finalAdjustedEnd += 0.5
-                          }
-                          
-                          // Account for early ending if this word comes before a deletion
-                          if (isWordBeforeDeletion(index)) {
-                            finalAdjustedEnd -= 0.5
-                          }
-                          
-                          // Only highlight if we're within reasonable range AND this is the closest non-deleted word
-                          const isInRange = currentTime >= finalAdjustedStart && currentTime <= finalAdjustedEnd + 0.5
+                          // Check if we're within the word's effective time range
+                          const isInRange = effectiveCurrentTime >= effectiveStart && effectiveCurrentTime <= effectiveEnd + 0.2
                           const isCurrentlyPlaying = isInRange && isClosestWord && !deletedWords.has(word.id)
+                          
+                          // For display purposes, calculate final adjusted times for tooltips
+                          const finalAdjustedStart = effectiveStart
+                          const finalAdjustedEnd = effectiveEnd
                           
                           const isSelected = selectedWords.has(word.id)
                           const isDragSelected = dragSelection.has(word.id)
@@ -2809,7 +3397,9 @@ export default function AIVideoEditor() {
                                   : isSelected
                                   ? 'bg-blue-500 text-white border-blue-600 shadow-sm cursor-pointer'
                                   : isDeleted
-                                  ? 'bg-red-100 text-red-400 line-through opacity-60 cursor-not-allowed'
+                                  ? isSelectionMode 
+                                    ? 'bg-red-100 text-red-600 line-through opacity-80 cursor-pointer hover:bg-red-200 hover:opacity-90 border-red-300'
+                                    : 'bg-red-100 text-red-400 line-through opacity-60 cursor-not-allowed'
                                   : isSelectionMode
                                   ? 'hover:bg-blue-100 hover:text-blue-700 hover:border-blue-300 hover:shadow-sm bg-white border-gray-200 cursor-pointer'
                                   : 'hover:bg-blue-100 hover:text-blue-700 hover:border-blue-300 hover:shadow-sm cursor-pointer'
@@ -2838,22 +3428,39 @@ export default function AIVideoEditor() {
                                   // Don't handle clicks during drag
                                   return
                                 }
+                                
+                                // Handle deleted word clicks - restore them in edit mode
+                                if (isDeleted && isSelectionMode) {
+                                  console.log(`🔄 Clicked on deleted word "${word.text}" in edit mode - restoring...`)
+                                  restoreSingleWord(word.id, index)
+                                  return
+                                }
+                                
                                 if (isSelectionMode || e.ctrlKey || e.metaKey || e.shiftKey) {
-                                  toggleWordSelection(word.id, index, e)
+                                  // Only allow selection of non-deleted words
+                                  if (!isDeleted) {
+                                    toggleWordSelection(word.id, index, e)
+                                  }
                                 } else if (!isDeleted) {
+                                  // Use effective timing for accurate seeking
+                                  const seekTime = getEffectiveWordTime(index, 'start')
                                   const afterDeletion = isWordAfterDeletion(index)
                                   const beforeDeletion = isWordBeforeDeletion(index)
-                                  const adjustmentNote = afterDeletion ? '+0.5s after deletion' : beforeDeletion ? '-0.5s before deletion' : 'none'
-                                  console.log(`Seeking to word "${word.text}" at final adjusted time ${finalAdjustedStart}s (original: ${word.start}s, adjustment: ${adjustmentNote})`)
-                                  handleSeek(finalAdjustedStart)
+                                  let adjustmentNote = 'base ±0.1s'
+                                  if (afterDeletion) adjustmentNote += ', +0.5s after deletion'
+                                  if (beforeDeletion) adjustmentNote += ', -0.8s before deletion'
+                                  console.log(`🎯 Seeking to word "${word.text}" at effective time ${seekTime.toFixed(2)}s (original: ${word.originalStart}s, adjustments: ${adjustmentNote})`)
+                                  handleSeek(seekTime)
                                 }
                               }}
                               title={
                                 isDeleted 
-                                  ? `"${word.text}" - DELETED (originally at ${formatTime(word.start)})`
+                                  ? isSelectionMode
+                                    ? `"${word.text}" - DELETED (originally at ${formatTime(word.originalStart)}) - Click to restore this word`
+                                    : `"${word.text}" - DELETED (originally at ${formatTime(word.originalStart)}) - Enable Edit Mode to restore`
                                   : isSelectionMode
-                                  ? `"${word.text}" at ${formatTime(finalAdjustedStart)} ${isWordAfterDeletion(index) ? '(+0.5s after deletion)' : isWordBeforeDeletion(index) ? '(-0.5s before deletion)' : '(adj.)'} - Click to select, Shift+click for range, Ctrl+click to toggle`
-                                  : `"${word.text}" at ${formatTime(finalAdjustedStart)} ${isWordAfterDeletion(index) ? '(+0.5s after deletion)' : isWordBeforeDeletion(index) ? '(-0.5s before deletion)' : '(adjusted)'} - Click to jump`
+                                  ? `"${word.text}" - Original: ${formatTime(word.originalStart)} | Effective: ${formatTime(effectiveStart)} - Click to select, Shift+click for range, Ctrl+click to toggle`
+                                  : `"${word.text}" - Original: ${formatTime(word.originalStart)} | Effective: ${formatTime(effectiveStart)} - Click to jump`
                               }
                             >
                               {word.text}
@@ -2880,9 +3487,11 @@ export default function AIVideoEditor() {
                          {isSelectionMode 
                            ? isDragging
                              ? "Dragging to select words • Release to finish selection • ESC to cancel"
+                             : deletedWords.size > 0
+                             ? "Selection Mode: Click words to select/delete • Click deleted words to restore • Shift+click for range"
                              : "Selection Mode: Click words or click+drag to select ranges • Shift+click for range"
                            : deletedWords.size > 0
-                           ? "Struck-through words are deleted • Click words to jump • Live tracking skips deleted words"
+                           ? "Struck-through words are deleted • Click words to jump • Enable Edit Mode to restore deleted words"
                            : "Click words to jump • Toggle Edit Mode to select and delete"
                          }
                        </span>
@@ -2904,26 +3513,13 @@ export default function AIVideoEditor() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <Button className="w-full" onClick={handleProcess} disabled={isProcessing}>
+                <Button className="w-full" onClick={handleProcess}>
                   <Sparkles className="w-4 h-4 mr-2" />
-                  {isProcessing ? "Processing..." : "Enhance Video"}
+                  Enhance Video
                 </Button>
                 
-
-
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <label className="text-sm font-medium">Remove Filler Words</label>
-                    <Switch defaultChecked />
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <label className="text-sm font-medium">Auto Pacing</label>
-                    <Switch defaultChecked />
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <label className="text-sm font-medium">Smart Cuts</label>
-                    <Switch defaultChecked />
-                  </div>
+                <div className="text-xs text-gray-500 text-center">
+                  Analyzes audio for pauses and filler words using AI transcription
                 </div>
               </CardContent>
             </Card>
@@ -3034,23 +3630,24 @@ export default function AIVideoEditor() {
               </CardContent>
             </Card>
 
-            {/* Selected Cuts Summary */}
-            {cutSegments.length > 0 && (
+            {/* Pending Edits Summary */}
+            {(cutSegments.length > 0 || pendingEdits.length > 0) && (
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
-                    <Scissors className="w-5 h-5 text-red-600" />
-                    Selected Cuts
-                    <Badge variant="destructive">{cutSegments.length}</Badge>
+                    <Scissors className="w-5 h-5 text-purple-600" />
+                    Pending Edits
+                    <Badge variant="secondary">{cutSegments.length + pendingEdits.length}</Badge>
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  <div className="space-y-2 max-h-32 overflow-y-auto">
+                  <div className="space-y-2 max-h-48 overflow-y-auto">
+                    {/* Traditional cuts (filler words and pauses) */}
                     {cutSegments.map((cut, index) => (
-                      <div key={index} className="flex items-center justify-between p-2 bg-red-50 rounded">
+                      <div key={`cut-${index}`} className="flex items-center justify-between p-2 bg-red-50 rounded">
                         <div className="flex items-center gap-2">
                           <span className="text-xs font-medium text-red-700">
-                            {cut.type === 'filler' ? 'Filler' : 'Pause'}
+                            {cut.type === 'filler' ? 'Filler' : cut.type === 'pause' ? 'Pause' : 'Cut'}
                           </span>
                           <Badge variant="outline">{formatTime(cut.start)} - {formatTime(cut.end)}</Badge>
                           <span className="text-xs text-gray-500">
@@ -3067,24 +3664,91 @@ export default function AIVideoEditor() {
                         </Button>
                       </div>
                     ))}
+                    
+                    {/* Transcript edits (deletions and restorations) */}
+                    {pendingEdits.map((edit) => (
+                      <div key={edit.id} className={`flex items-center justify-between p-2 rounded ${
+                        edit.type === 'deletion' ? 'bg-red-50' : 'bg-green-50'
+                      }`}>
+                        <div className="flex items-center gap-2">
+                          <span className={`text-xs font-medium ${
+                            edit.type === 'deletion' ? 'text-red-700' : 'text-green-700'
+                          }`}>
+                            {edit.type === 'deletion' ? 'Delete' : 'Restore'}
+                          </span>
+                          <Badge variant="outline" className="max-w-32 truncate">
+                            {edit.text}
+                          </Badge>
+                          <span className={`text-xs ${
+                            edit.type === 'deletion' ? 'text-gray-500' : 'text-green-600'
+                          }`}>
+                            {edit.type === 'deletion' ? '-' : '+'}{edit.duration.toFixed(1)}s
+                          </span>
+                        </div>
+                        <Button 
+                          size="sm" 
+                          variant="ghost"
+                          onClick={() => {
+                            // Remove the edit and restore/re-delete the words accordingly
+                            if (edit.type === 'deletion') {
+                              // Restore the words
+                              setDeletedWords(prev => {
+                                const newDeleted = new Set(prev)
+                                edit.wordIds.forEach(id => newDeleted.delete(id))
+                                return newDeleted
+                              })
+                            } else {
+                              // Re-delete the words
+                              setDeletedWords(prev => {
+                                const newDeleted = new Set(prev)
+                                edit.wordIds.forEach(id => newDeleted.add(id))
+                                return newDeleted
+                              })
+                            }
+                            // Remove from pending edits
+                            setPendingEdits(prev => prev.filter(e => e.id !== edit.id))
+                          }}
+                          title={`Cancel this ${edit.type}`}
+                        >
+                          ×
+                        </Button>
+                      </div>
+                    ))}
                   </div>
-                  <div className="pt-2 border-t">
-                    <div className="flex items-center justify-between text-sm mb-2">
-                      <span className="font-medium">Total time saved:</span>
-                      <span className="text-green-600 font-bold">
-                        {cutSegments.reduce((total, cut) => total + (cut.end - cut.start), 0).toFixed(1)}s
-                      </span>
+                  
+                  {(cutSegments.length > 0 || pendingEdits.length > 0) && (
+                    <div className="pt-2 border-t">
+                      <div className="flex items-center justify-between text-sm mb-2">
+                        <span className="font-medium">Net time change:</span>
+                        <span className={`font-bold ${
+                          (() => {
+                            const cutTime = cutSegments.reduce((total, cut) => total + (cut.end - cut.start), 0)
+                            const deletionTime = pendingEdits.filter(e => e.type === 'deletion').reduce((total, edit) => total + edit.duration, 0)
+                            const restorationTime = pendingEdits.filter(e => e.type === 'restoration').reduce((total, edit) => total + edit.duration, 0)
+                            const netTime = cutTime + deletionTime - restorationTime
+                            return netTime >= 0 ? 'text-green-600' : 'text-red-600'
+                          })()
+                        }`}>
+                          {(() => {
+                            const cutTime = cutSegments.reduce((total, cut) => total + (cut.end - cut.start), 0)
+                            const deletionTime = pendingEdits.filter(e => e.type === 'deletion').reduce((total, edit) => total + edit.duration, 0)
+                            const restorationTime = pendingEdits.filter(e => e.type === 'restoration').reduce((total, edit) => total + edit.duration, 0)
+                            const netTime = cutTime + deletionTime - restorationTime
+                            return `${netTime >= 0 ? '-' : '+'}${Math.abs(netTime).toFixed(1)}s`
+                          })()}
+                        </span>
+                      </div>
+                      <Button 
+                        className="w-full bg-purple-600 hover:bg-purple-700" 
+                        size="sm"
+                        onClick={() => applyEdits()}
+                        disabled={cutSegments.length === 0 && pendingEdits.length === 0}
+                      >
+                                                  <Scissors className="w-3 h-3 mr-2" />
+                          Apply Edits
+                      </Button>
                     </div>
-                    <Button 
-                      className="w-full bg-red-600 hover:bg-red-700" 
-                      size="sm"
-                      onClick={() => applyCuts()}
-                      disabled={isProcessing || cutSegments.length === 0}
-                    >
-                      <Scissors className="w-3 h-3 mr-2" />
-                      {isProcessing ? "Processing..." : "Apply All Cuts"}
-                    </Button>
-                  </div>
+                  )}
                 </CardContent>
               </Card>
             )}
@@ -3124,6 +3788,17 @@ export default function AIVideoEditor() {
           </CardContent>
         </Card>
       </div>
+      
+      {/* Floating Confirmation Message */}
+      {confirmationMessage && (
+        <div className="fixed top-4 right-4 z-50 animate-in fade-in-0 duration-300">
+          <div className="bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg flex items-center gap-2">
+            <div className="w-2 h-2 bg-white rounded-full"></div>
+            <span className="text-sm font-medium">{confirmationMessage}</span>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
+
